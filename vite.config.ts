@@ -4,8 +4,10 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  base: '',
   build: {
+    outDir: 'dist',
+    assetsDir: '',
     rollupOptions: {
       output: {
         manualChunks: {
@@ -32,8 +34,8 @@ export default defineConfig({
             '/src/services/recommendationService.ts'
           ]
         },
-        chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash][extname]'
+        chunkFileNames: '[name]-[hash].js',
+        assetFileNames: '[name]-[hash][extname]'
       }
     },
     chunkSizeWarningLimit: 800,
