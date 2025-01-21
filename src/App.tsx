@@ -19,6 +19,9 @@ import CommentModeration from './components/admin/CommentModeration';
 import StatsDashboard from './components/admin/StatsDashboard';
 import { AdvancedSearch } from './components/search/AdvancedSearch';
 import { AuthProvider } from './contexts/AuthContext';
+import LoginPage from './pages/admin/login';
+import ArticlesPage from './pages/admin/articles';
+import AdminLayout from './components/admin/AdminLayout';
 
 function HomePage() {
   return (
@@ -53,7 +56,20 @@ function App() {
             <Route path="/articles" element={<ArticlesPage />} />
             <Route path="/articles/:slug" element={<ArticlePage />} />
             <Route path="/offre" element={<Offre />} />
-            <Route path="/admin/login" element={<Login />} />
+            <Route path="/admin/login" element={<LoginPage />} />
+            <Route
+              path="/admin/*"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <Routes>
+                      <Route path="/" element={<ArticlesPage />} />
+                      <Route path="/articles" element={<ArticlesPage />} />
+                    </Routes>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/dashboard"
               element={
