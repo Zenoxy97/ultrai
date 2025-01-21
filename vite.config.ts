@@ -6,10 +6,37 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
-    plugins: [react()],
+    plugins: [
+      react({
+        jsxRuntime: 'classic',
+        babel: {
+          plugins: ['@babel/plugin-transform-react-jsx']
+        }
+      })
+    ],
     base: './',
     define: {
-      'process.env': env
+      'process.env': env,
+      'global': 'globalThis'
+    },
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'),
+        'react': resolve(__dirname, './node_modules/react'),
+        'react-dom': resolve(__dirname, './node_modules/react-dom')
+      }
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        '@radix-ui/react-toast',
+        'class-variance-authority',
+        'clsx',
+        'tailwind-merge',
+        'lucide-react'
+      ],
+      exclude: ['@radix-ui/react-presence']
     },
     build: {
       outDir: 'dist',
@@ -28,6 +55,9 @@ export default defineConfig(({ mode }) => {
               if (id.includes('firebase')) {
                 return 'vendor-firebase';
               }
+              if (id.includes('@radix-ui')) {
+                return 'vendor-radix';
+              }
               return 'vendor';
             }
             if (id.includes('/admin/')) {
@@ -39,6 +69,10 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[name].[hash][extname]'
         }
       },
+      commonjsOptions: {
+        include: [/node_modules/],
+        transformMixedEsModules: true
+      },
       sourcemap: true,
       minify: 'terser',
       terserOptions: {
@@ -46,11 +80,6 @@ export default defineConfig(({ mode }) => {
           drop_console: false,
           drop_debugger: true
         }
-      }
-    },
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, './src')
       }
     },
     server: {
