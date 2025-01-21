@@ -1,4 +1,31 @@
 User-agent: *
 Allow: /
 
+# Sitemap
 Sitemap: https://ultrai.fr/sitemap.xml
+
+# Assets
+Allow: /static/
+Allow: /images/
+Allow: /assets/
+Allow: /*.js
+Allow: /*.css
+Allow: /*.png
+Allow: /*.jpg
+Allow: /*.svg
+Allow: /*.ico
+
+# Ne pas indexer les pages d'administration
+Disallow: /admin/
+Disallow: /login/
+Disallow: /dashboard/
+
+# Ne pas indexer les fichiers système
+Disallow: /.env
+Disallow: /.git/
+Disallow: /node_modules/
+Disallow: /src/
+Disallow: /public/
+Disallow: /*.json
+Disallow: /*.config.js
+Disallow: /*.lock
