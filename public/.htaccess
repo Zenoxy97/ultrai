@@ -7,48 +7,50 @@ RewriteEngine On
 RewriteCond %{HTTPS} off
 RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# LiteSpeed configuration
+<IfModule Litespeed>
+    RewriteEngine On
+    RewriteRule .* - [E=noabort:1]
+    RewriteRule .* - [E=noconntimeout:1]
+</IfModule>
+
 # Types MIME pour JavaScript modules
-AddType application/javascript .js
-AddType application/javascript .mjs
-AddType application/javascript .tsx
-AddType application/javascript .ts
+<IfModule mod_mime.c>
+    AddType application/javascript .js
+    AddType application/javascript .mjs
+    AddType application/javascript .tsx
+    AddType application/javascript .ts
+    AddType text/css .css
+</IfModule>
 
-# Headers pour JavaScript modules
-<FilesMatch "\.(js|mjs|tsx|ts)$">
-    Header set Content-Type application/javascript
-    Header set X-Content-Type-Options nosniff
-</FilesMatch>
-
-# Headers de sécurité
+# Headers pour JavaScript modules et sécurité
 <IfModule mod_headers.c>
+    <FilesMatch "\.(js|mjs|tsx|ts)$">
+        Header set Content-Type "application/javascript"
+        Header set X-Content-Type-Options "nosniff"
+    </FilesMatch>
+
+    <FilesMatch "\.css$">
+        Header set Content-Type "text/css"
+    </FilesMatch>
+
+    # Headers de sécurité généraux
     Header set X-Frame-Options "SAMEORIGIN"
     Header set X-XSS-Protection "1; mode=block"
     Header set X-Content-Type-Options "nosniff"
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
     
-    # Activation de CORS pour les assets
+    # CORS pour les assets
     <FilesMatch "\.(js|css|ttf|ttc|otf|eot|woff|woff2|font.css|css|json)$">
         Header set Access-Control-Allow-Origin "*"
     </FilesMatch>
+
+    # Cache-Control
+    <FilesMatch "\.(js|css|jpg|jpeg|png|gif|ico|svg|woff2|woff)$">
+        Header set Cache-Control "max-age=31536000, public"
+    </FilesMatch>
 </IfModule>
-
-# Gestion du SPA routing
-# Ne pas appliquer aux fichiers et dossiers existants
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_FILENAME} !-f
-# Ne pas appliquer aux assets
-RewriteCond %{REQUEST_URI} !^/assets/
-RewriteCond %{REQUEST_URI} !^/static/
-RewriteCond %{REQUEST_URI} !^/api/
-RewriteCond %{REQUEST_URI} !^/favicon
-# Rediriger vers index.html
-RewriteRule ^ index.html [L]
-
-# Cache-Control headers
-<FilesMatch "\.(js|css|jpg|jpeg|png|gif|ico|svg|woff2|woff)$">
-    Header set Cache-Control "max-age=31536000, public"
-</FilesMatch>
 
 # Compression Gzip
 <IfModule mod_deflate.c>
@@ -62,3 +64,22 @@ RewriteRule ^ index.html [L]
     AddOutputFilterByType DEFLATE application/javascript
     AddOutputFilterByType DEFLATE application/x-javascript
 </IfModule>
+
+# Gestion du SPA routing
+DirectoryIndex index.html
+
+# Ne pas appliquer aux fichiers et dossiers existants
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+# Ne pas appliquer aux assets et API
+RewriteCond %{REQUEST_URI} !^/assets/
+RewriteCond %{REQUEST_URI} !^/static/
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_URI} !^/favicon
+# Rediriger vers index.html
+RewriteRule ^ index.html [L]
+
+# Permettre les méthodes HTTP nécessaires
+<Limit GET POST PUT DELETE OPTIONS>
+    Require all granted
+</Limit>
