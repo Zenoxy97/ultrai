@@ -22,6 +22,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import LoginPage from './pages/admin/login';
 import ArticlesPage from './pages/admin/articles';
 import AdminLayout from './components/admin/AdminLayout';
+import DashboardPage from './pages/admin/dashboard';
 
 function HomePage() {
   return (
@@ -63,7 +64,8 @@ function App() {
                 <ProtectedRoute>
                   <AdminLayout>
                     <Routes>
-                      <Route path="/" element={<ArticlesPage />} />
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="/dashboard" element={<DashboardPage />} />
                       <Route path="/articles" element={<ArticlesPage />} />
                     </Routes>
                   </AdminLayout>
