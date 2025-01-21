@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Fonction pour vérifier si l'utilisateur est administrateur
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@ultrai.com';
+    }
+    
+    // Images d'articles peuvent être lues par tout le monde mais uploadées uniquement par l'admin
+    match /articles/{imageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Autres fichiers ne peuvent être lus et modifiés que par l'admin
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

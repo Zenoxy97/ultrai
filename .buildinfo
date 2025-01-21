@@ -1,0 +1,21 @@
+{
+  "build": {
+    "command": "npm install && npm run build",
+    "output": "build",
+    "environment": {
+      "NODE_VERSION": "18"
+    }
+  },
+  "deploy": {
+    "type": "static",
+    "spa": true,
+    "headers": {
+      "/*": {
+        "Cache-Control": "no-cache"
+      },
+      "/static/*": {
+        "Cache-Control": "public, max-age=31536000"
+      }
+    }
+  }
+}
