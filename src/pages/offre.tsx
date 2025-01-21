@@ -354,14 +354,16 @@ export default function Offre() {
               <p className="text-gray-600 mb-8">
                 📞 Réservez maintenant avant que toutes les places ne soient prises !
               </p>
-              <Button 
-                size="lg"
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 text-base sm:text-xl font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 min-h-[60px]"
-                onClick={() => window.open('https://calendly.com/ultrai/session-strategique', '_blank')}
-              >
-                <span className="text-center">RÉSERVER MA SESSION STRATÉGIQUE</span>
-                <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
-              </Button>
+              <div className="flex justify-center">
+                <Button 
+                  size="lg"
+                  className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-4 md:px-8 py-3 md:py-4 text-sm md:text-xl font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 min-h-[50px] md:min-h-[60px] max-w-[90%] md:max-w-none mx-auto"
+                  onClick={() => window.open('https://calendly.com/ultrai/session-strategique', '_blank')}
+                >
+                  <span className="text-center whitespace-normal md:whitespace-nowrap">RÉSERVER MA SESSION STRATÉGIQUE</span>
+                  <ArrowRight className="h-4 w-4 md:h-6 md:w-6 flex-shrink-0" />
+                </Button>
+              </div>
             </div>
           </div>
         </div>
