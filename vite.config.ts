@@ -50,6 +50,23 @@ export default defineConfig({
       '@': resolve(__dirname, './src')
     }
   },
+  server: {
+    headers: {
+      'Content-Type': 'application/javascript',
+      'X-Content-Type-Options': 'nosniff'
+    },
+    middlewareMode: false,
+    fs: {
+      strict: true,
+      allow: ['./src']
+    }
+  },
+  preview: {
+    headers: {
+      'Content-Type': 'application/javascript',
+      'X-Content-Type-Options': 'nosniff'
+    }
+  },
   optimizeDeps: {
     exclude: ['lucide-react']
   }
