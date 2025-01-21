@@ -7,41 +7,36 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: '/',
+    base: './',
     define: {
       'process.env': env
     },
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
+      manifest: true,
       rollupOptions: {
+        input: {
+          main: resolve(__dirname, 'index.html'),
+        },
         output: {
-          manualChunks: {
-            'vendor': [
-              'react',
-              'react-dom',
-              'react-router-dom',
-              'firebase/app',
-              'firebase/auth',
-              'firebase/firestore',
-              'firebase/storage'
-            ],
-            'admin': [
-              '/src/components/admin/CommentModeration.tsx',
-              '/src/components/admin/StatsDashboard.tsx',
-              '/src/components/admin/CategoryManager.tsx'
-            ],
-            'search': [
-              '/src/components/search/AdvancedSearch.tsx',
-              '/src/services/searchService.ts'
-            ],
-            'recommendations': [
-              '/src/components/recommendations/ArticleRecommendations.tsx'
-            ]
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor-react';
+              }
+              if (id.includes('firebase')) {
+                return 'vendor-firebase';
+              }
+              return 'vendor';
+            }
+            if (id.includes('/admin/')) {
+              return 'admin';
+            }
           },
-          entryFileNames: 'assets/[name]-[hash].js',
-          chunkFileNames: 'assets/[name]-[hash].js',
-          assetFileNames: 'assets/[name]-[hash][extname]'
+          entryFileNames: 'assets/[name].[hash].js',
+          chunkFileNames: 'assets/[name].[hash].js',
+          assetFileNames: 'assets/[name].[hash][extname]'
         }
       },
       sourcemap: true,
@@ -60,7 +55,10 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
-      host: true
+      host: true,
+      fs: {
+        strict: false
+      }
     },
     preview: {
       port: 3000,
