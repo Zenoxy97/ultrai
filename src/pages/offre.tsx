@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Check, Clock, Zap, Target } from "lucide-react";
 
+// Test de déploiement automatique Netlify
+
 const programSteps = [
   {
     period: "Semaine 1-2",
