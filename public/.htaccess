@@ -44,3 +44,15 @@ RewriteRule ^ index.html [QSA,L]
     Header set Referrer-Policy "strict-origin-when-cross-origin"
     Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
 </IfModule>
+
+# Types MIME pour JavaScript modules
+AddType application/javascript .js
+AddType application/javascript .mjs
+AddType application/javascript .tsx
+AddType application/javascript .ts
+
+# Headers pour JavaScript modules
+<FilesMatch "\.(js|mjs|tsx|ts)$">
+    Header set Content-Type application/javascript
+    Header set X-Content-Type-Options nosniff
+</FilesMatch>
