@@ -1,49 +1,11 @@
 Options -MultiViews
+
+# Activation du module de réécriture
 RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^ index.html [QSA,L]
 
-# Compression GZIP
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/plain
-    AddOutputFilterByType DEFLATE text/html
-    AddOutputFilterByType DEFLATE text/xml
-    AddOutputFilterByType DEFLATE text/css
-    AddOutputFilterByType DEFLATE application/xml
-    AddOutputFilterByType DEFLATE application/xhtml+xml
-    AddOutputFilterByType DEFLATE application/rss+xml
-    AddOutputFilterByType DEFLATE application/javascript
-    AddOutputFilterByType DEFLATE application/x-javascript
-</IfModule>
-
-# Cache-Control Headers
-<IfModule mod_headers.c>
-    # Cache CSS, JS and Images
-    <FilesMatch "\.(css|js|jpg|jpeg|png|gif|ico|svg)$">
-        Header set Cache-Control "max-age=31536000, public"
-    </FilesMatch>
-    
-    # Cache Fonts
-    <FilesMatch "\.(ttf|ttc|otf|eot|woff|woff2)$">
-        Header set Cache-Control "max-age=31536000, public"
-    </FilesMatch>
-    
-    # No cache for HTML and PHP files
-    <FilesMatch "\.(html|php)$">
-        Header set Cache-Control "no-cache, no-store, must-revalidate"
-        Header set Pragma "no-cache"
-        Header set Expires 0
-    </FilesMatch>
-</IfModule>
-
-# Security Headers
-<IfModule mod_headers.c>
-    Header set X-Content-Type-Options "nosniff"
-    Header set X-XSS-Protection "1; mode=block"
-    Header set X-Frame-Options "SAMEORIGIN"
-    Header set Referrer-Policy "strict-origin-when-cross-origin"
-    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
-</IfModule>
+# Forcer HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
 # Types MIME pour JavaScript modules
 AddType application/javascript .js
@@ -56,3 +18,47 @@ AddType application/javascript .ts
     Header set Content-Type application/javascript
     Header set X-Content-Type-Options nosniff
 </FilesMatch>
+
+# Headers de sécurité
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    
+    # Activation de CORS pour les assets
+    <FilesMatch "\.(js|css|ttf|ttc|otf|eot|woff|woff2|font.css|css|json)$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+</IfModule>
+
+# Gestion du SPA routing
+# Ne pas appliquer aux fichiers et dossiers existants
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+# Ne pas appliquer aux assets
+RewriteCond %{REQUEST_URI} !^/assets/
+RewriteCond %{REQUEST_URI} !^/static/
+RewriteCond %{REQUEST_URI} !^/api/
+RewriteCond %{REQUEST_URI} !^/favicon
+# Rediriger vers index.html
+RewriteRule ^ index.html [L]
+
+# Cache-Control headers
+<FilesMatch "\.(js|css|jpg|jpeg|png|gif|ico|svg|woff2|woff)$">
+    Header set Cache-Control "max-age=31536000, public"
+</FilesMatch>
+
+# Compression Gzip
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/xml
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/xml
+    AddOutputFilterByType DEFLATE application/xhtml+xml
+    AddOutputFilterByType DEFLATE application/rss+xml
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/x-javascript
+</IfModule>
