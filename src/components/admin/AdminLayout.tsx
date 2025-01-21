@@ -1,8 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { auth } from '@/config/firebase';
-import { signOut } from 'firebase/auth';
+import { supabase } from '@/config/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { LayoutGrid, FileText, Settings, LogOut } from 'lucide-react';
 
@@ -17,7 +16,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
       toast({
         title: 'Déconnexion réussie',
         description: 'Vous avez été déconnecté avec succès.',

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Article } from '@/types/Article';
 import ArticleEditor from '@/components/admin/ArticleEditor';
-import { collection, query, orderBy, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { supabase } from '@/config/supabase';
 import { Button } from '@/components/ui/button';
 import { Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { format } from 'date-fns';
@@ -18,14 +17,14 @@ export default function ArticlesPage() {
   const fetchArticles = async () => {
     try {
       setIsLoading(true);
-      const articlesRef = collection(db, 'articles');
-      const q = query(articlesRef, orderBy('updatedAt', 'desc'));
-      const snapshot = await getDocs(q);
-      const articlesData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Article[];
-      setArticles(articlesData);
+      const { data, error } = await supabase
+        .from('articles')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      setArticles(data || []);
     } catch (error) {
       console.error('Error fetching articles:', error);
       toast({
@@ -48,7 +47,13 @@ export default function ArticlesPage() {
     }
 
     try {
-      await deleteDoc(doc(db, 'articles', articleId));
+      const { error } = await supabase
+        .from('articles')
+        .delete()
+        .eq('id', articleId);
+
+      if (error) throw error;
+
       toast({
         title: 'Article supprimé',
         description: 'L\'article a été supprimé avec succès.',
@@ -115,7 +120,7 @@ export default function ArticlesPage() {
                 <h3 className="font-semibold">{article.title}</h3>
                 <div className="text-sm text-gray-500 space-x-4">
                   <span>
-                    Mis à jour le {format(new Date(article.updatedAt), 'dd/MM/yyyy')}
+                    Mis à jour le {format(new Date(article.updated_at), 'dd/MM/yyyy')}
                   </span>
                   <span>
                     Status: {article.status === 'published' ? 'Publié' : 'Brouillon'}

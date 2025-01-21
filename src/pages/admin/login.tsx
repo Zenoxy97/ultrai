@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '@/config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { supabase } from '@/config/supabase';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -18,12 +17,20 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      toast({
-        title: 'Connexion réussie',
-        description: 'Vous êtes maintenant connecté.',
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
-      navigate('/admin/articles');
+
+      if (error) throw error;
+
+      if (data.user) {
+        toast({
+          title: 'Connexion réussie',
+          description: 'Vous êtes maintenant connecté.',
+        });
+        navigate('/admin/articles');
+      }
     } catch (error) {
       console.error('Error logging in:', error);
       toast({

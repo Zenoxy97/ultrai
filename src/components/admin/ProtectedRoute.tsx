@@ -1,7 +1,6 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { auth } from '@/config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { supabase } from '@/config/supabase';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -12,11 +11,19 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const location = useLocation();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user && user.email === process.env.VITE_ADMIN_EMAIL);
-    });
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAuthenticated(!!session);
 
-    return () => unsubscribe();
+      // Écouter les changements d'authentification
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setIsAuthenticated(!!session);
+      });
+
+      return () => subscription.unsubscribe();
+    };
+
+    checkAuth();
   }, []);
 
   if (isAuthenticated === null) {
