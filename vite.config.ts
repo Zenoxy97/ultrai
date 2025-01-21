@@ -7,13 +7,13 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: '',
+    base: '/',
     define: {
       'process.env': env
     },
     build: {
       outDir: 'dist',
-      assetsDir: '',
+      assetsDir: 'assets',
       rollupOptions: {
         output: {
           manualChunks: {
@@ -36,20 +36,19 @@ export default defineConfig(({ mode }) => {
               '/src/services/searchService.ts'
             ],
             'recommendations': [
-              '/src/components/recommendations/ArticleRecommendations.tsx',
-              '/src/services/recommendationService.ts'
+              '/src/components/recommendations/ArticleRecommendations.tsx'
             ]
           },
-          chunkFileNames: '[name]-[hash].js',
-          assetFileNames: '[name]-[hash][extname]'
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash][extname]'
         }
       },
-      chunkSizeWarningLimit: 800,
       sourcemap: true,
       minify: 'terser',
       terserOptions: {
         compress: {
-          drop_console: true,
+          drop_console: false,
           drop_debugger: true
         }
       }
@@ -60,24 +59,12 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'X-Content-Type-Options': 'nosniff'
-      },
-      middlewareMode: false,
-      fs: {
-        strict: true,
-        allow: ['./src']
-      }
+      port: 3000,
+      host: true
     },
     preview: {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'X-Content-Type-Options': 'nosniff'
-      }
-    },
-    optimizeDeps: {
-      exclude: ['lucide-react']
+      port: 3000,
+      host: true
     }
   }
 });
