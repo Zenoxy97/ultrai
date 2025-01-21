@@ -6,92 +6,78 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
-    plugins: [
-      react({
-        jsxRuntime: 'classic',
-        babel: {
-          plugins: ['@babel/plugin-transform-react-jsx']
-        }
-      })
-    ],
-    base: './',
+    plugins: [react()],
+    base: '',
     define: {
-      'process.env': env,
-      'global': 'globalThis'
-    },
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, './src'),
-        'react': resolve(__dirname, './node_modules/react'),
-        'react-dom': resolve(__dirname, './node_modules/react-dom')
-      }
-    },
-    optimizeDeps: {
-      include: [
-        'react',
-        'react-dom',
-        '@radix-ui/react-toast',
-        'class-variance-authority',
-        'clsx',
-        'tailwind-merge',
-        'lucide-react'
-      ],
-      exclude: ['@radix-ui/react-presence']
+      'process.env': env
     },
     build: {
       outDir: 'dist',
-      assetsDir: 'assets',
-      manifest: true,
+      assetsDir: '',
       rollupOptions: {
-        input: {
-          main: resolve(__dirname, 'index.html'),
-        },
         output: {
-          manualChunks: (id) => {
-            if (id.includes('node_modules')) {
-              if (id.includes('react') || id.includes('react-dom')) {
-                return 'vendor-react';
-              }
-              if (id.includes('firebase')) {
-                return 'vendor-firebase';
-              }
-              if (id.includes('@radix-ui')) {
-                return 'vendor-radix';
-              }
-              return 'vendor';
-            }
-            if (id.includes('/admin/')) {
-              return 'admin';
-            }
+          manualChunks: {
+            'vendor': [
+              'react',
+              'react-dom',
+              'react-router-dom',
+              'firebase/app',
+              'firebase/auth',
+              'firebase/firestore',
+              'firebase/storage'
+            ],
+            'admin': [
+              '/src/components/admin/CommentModeration.tsx',
+              '/src/components/admin/StatsDashboard.tsx',
+              '/src/components/admin/CategoryManager.tsx'
+            ],
+            'search': [
+              '/src/components/search/AdvancedSearch.tsx',
+              '/src/services/searchService.ts'
+            ],
+            'recommendations': [
+              '/src/components/recommendations/ArticleRecommendations.tsx',
+              '/src/services/recommendationService.ts'
+            ]
           },
-          entryFileNames: 'assets/[name].[hash].js',
-          chunkFileNames: 'assets/[name].[hash].js',
-          assetFileNames: 'assets/[name].[hash][extname]'
+          chunkFileNames: '[name]-[hash].js',
+          assetFileNames: '[name]-[hash][extname]'
         }
       },
-      commonjsOptions: {
-        include: [/node_modules/],
-        transformMixedEsModules: true
-      },
+      chunkSizeWarningLimit: 800,
       sourcemap: true,
       minify: 'terser',
       terserOptions: {
         compress: {
-          drop_console: false,
+          drop_console: true,
           drop_debugger: true
         }
       }
     },
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src')
+      }
+    },
     server: {
-      port: 3000,
-      host: true,
+      headers: {
+        'Content-Type': 'application/javascript',
+        'X-Content-Type-Options': 'nosniff'
+      },
+      middlewareMode: false,
       fs: {
-        strict: false
+        strict: true,
+        allow: ['./src']
       }
     },
     preview: {
-      port: 3000,
-      host: true
+      headers: {
+        'Content-Type': 'application/javascript',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    },
+    optimizeDeps: {
+      exclude: ['lucide-react']
     }
   }
 });
