@@ -1,142 +1,147 @@
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  doc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  writeBatch,
-  increment as firestoreIncrement,
-  Timestamp
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '@/lib/supabase';
+import { formatDistanceToNow } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 export interface Comment {
-  id?: string;
-  articleId: string;
-  parentId?: string;
+  id: string;
+  content: string;
+  article_id: string;
+  user_id: string;
+  parent_id?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  likes: number;
   author: {
     name: string;
-    email: string;
+    email?: string;
     avatar?: string;
   };
-  content: string;
-  status: 'pending' | 'approved' | 'rejected';
-  likes: number;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
-export const commentService = {
-  // Récupérer les commentaires d'un article
-  async getComments(articleId: string, status?: string): Promise<Comment[]> {
-    const commentsRef = collection(db, 'comments');
-    const constraints: any[] = [
-      where('articleId', '==', articleId),
-      orderBy('createdAt', 'desc')
-    ];
+class CommentService {
+  private readonly table = 'comments';
+
+  async getComments(articleId: string, status?: Comment['status']): Promise<Comment[]> {
+    let query = supabase
+      .from(this.table)
+      .select(`
+        *,
+        author:users!user_id (
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .eq('article_id', articleId)
+      .order('created_at', { ascending: true });
 
     if (status) {
-      constraints.push(where('status', '==', status));
+      query = query.eq('status', status);
     }
 
-    const q = query(commentsRef, ...constraints);
-    const snapshot = await getDocs(q);
+    const { data, error } = await query;
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp).toDate(),
-      updatedAt: (doc.data().updatedAt as Timestamp).toDate()
-    })) as Comment[];
-  },
-
-  // Créer un nouveau commentaire
-  async createComment(comment: Omit<Comment, 'id' | 'createdAt' | 'updatedAt' | 'likes'>): Promise<string> {
-    const docRef = await addDoc(collection(db, 'comments'), {
-      ...comment,
-      likes: 0,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    return docRef.id;
-  },
-
-  // Mettre à jour un commentaire
-  async updateComment(id: string, data: Partial<Comment>): Promise<void> {
-    const docRef = doc(db, 'comments', id);
-    await updateDoc(docRef, {
-      ...data,
-      updatedAt: serverTimestamp()
-    });
-  },
-
-  // Supprimer un commentaire
-  async deleteComment(id: string): Promise<void> {
-    // Supprimer aussi les réponses à ce commentaire
-    const repliesRef = collection(db, 'comments');
-    const q = query(repliesRef, where('parentId', '==', id));
-    const snapshot = await getDocs(q);
-    
-    const batch = writeBatch(db);
-    snapshot.docs.forEach(doc => {
-      batch.delete(doc.ref);
-    });
-    
-    const commentRef = doc(db, 'comments', id);
-    batch.delete(commentRef);
-    
-    await batch.commit();
-  },
-
-  // Modérer un commentaire
-  async moderateComment(id: string, status: 'approved' | 'rejected'): Promise<void> {
-    await this.updateComment(id, { status });
-  },
-
-  // Liker un commentaire
-  async likeComment(id: string): Promise<void> {
-    const batch = writeBatch(db);
-    const commentRef = doc(db, 'comments', id);
-    
-    batch.update(commentRef, {
-      likes: firestoreIncrement(1)
-    });
-
-    await batch.commit();
-  },
-
-  // Récupérer les commentaires en attente de modération
-  async getPendingComments(): Promise<Comment[]> {
-    return this.getComments('', 'pending');
-  },
-
-  // Formater la date relative
-  formatRelativeDate(date: Date): string {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 7) {
-      return date.toLocaleDateString('fr-FR', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } else if (days > 0) {
-      return `il y a ${days} jour${days > 1 ? 's' : ''}`;
-    } else if (hours > 0) {
-      return `il y a ${hours} heure${hours > 1 ? 's' : ''}`;
-    } else if (minutes > 0) {
-      return `il y a ${minutes} minute${minutes > 1 ? 's' : ''}`;
-    } else {
-      return 'à l\'instant';
-    }
+    if (error) throw error;
+    return data.map(this.mapComment);
   }
-};
+
+  async getPendingComments(): Promise<Comment[]> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select(`
+        *,
+        author:users!user_id (
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data.map(this.mapComment);
+  }
+
+  async createComment(comment: Omit<Comment, 'id' | 'created_at' | 'updated_at' | 'status' | 'likes' | 'author'>): Promise<Comment> {
+    const now = new Date().toISOString();
+    
+    const { data, error } = await supabase
+      .from(this.table)
+      .insert([{
+        ...comment,
+        status: 'pending',
+        likes: 0,
+        created_at: now,
+        updated_at: now
+      }])
+      .select(`
+        *,
+        author:users!user_id (
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+    return this.mapComment(data);
+  }
+
+  async moderateComment(id: string, status: Comment['status']): Promise<Comment> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        author:users!user_id (
+          name,
+          email,
+          avatar_url
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+    return this.mapComment(data);
+  }
+
+  async likeComment(id: string): Promise<Comment> {
+    const { data, error } = await supabase.rpc('increment_comment_likes', { comment_id: id });
+
+    if (error) throw error;
+    return this.mapComment(data);
+  }
+
+  async deleteComment(id: string): Promise<void> {
+    const { error } = await supabase
+      .from(this.table)
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
+
+  formatRelativeDate(date: string): string {
+    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: fr });
+  }
+
+  private mapComment(data: any): Comment {
+    return {
+      ...data,
+      author: {
+        name: data.author?.name || 'Anonyme',
+        email: data.author?.email,
+        avatar: data.author?.avatar_url,
+      }
+    };
+  }
+}
+
+export const commentService = new CommentService();

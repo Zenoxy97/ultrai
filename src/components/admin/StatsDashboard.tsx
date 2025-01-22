@@ -12,8 +12,8 @@ import {
   ArcElement,
   BarElement
 } from 'chart.js';
-import { ArticleStats, DailyStats, statsService } from '../../services/statsService';
 import { articleService } from '../../services/articleService';
+import { statsService } from '../../services/statsService';
 
 // Enregistrer les composants Chart.js
 ChartJS.register(
@@ -28,12 +28,32 @@ ChartJS.register(
   BarElement
 );
 
-interface ArticleWithStats extends ArticleStats {
-  title?: string;
+interface ArticleWithStats {
+  id: string;
+  title: string;
+  views: number;
+  unique_visitors: number;
+  device_stats: {
+    mobile: number;
+    desktop: number;
+    tablet: number;
+  };
+  shares: {
+    facebook: number;
+    twitter: number;
+    linkedin: number;
+    email: number;
+  };
+}
+
+interface DailyStats {
+  date: string;
+  views: number;
+  unique_visitors: number;
 }
 
 export default function StatsDashboard() {
-  const [selectedPeriod, setSelectedPeriod] = useState<number>(30);
+  const [selectedPeriod, setSelectedPeriod] = useState<'7d' | '30d' | '90d'>('30d');
   const [topArticles, setTopArticles] = useState<ArticleWithStats[]>([]);
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,28 +68,24 @@ export default function StatsDashboard() {
       setLoading(true);
 
       // Charger les articles les plus vus
-      const mostViewed = await statsService.getMostViewedArticles(5);
-      const articlesWithTitles = await Promise.all(
-        mostViewed.map(async (stats) => {
-          try {
-            const article = await articleService.getArticle(stats.articleId);
-            return {
-              ...stats,
-              title: article?.title || 'Article supprimé'
-            };
-          } catch (err) {
-            return {
-              ...stats,
-              title: 'Article non trouvé'
-            };
-          }
+      const articles = await articleService.getArticles({ limit: 5 });
+      const articlesWithStats = await Promise.all(
+        articles.map(async (article) => {
+          const stats = await statsService.getArticleStats(article.id);
+          return {
+            ...stats,
+            title: article.title,
+          };
         })
       );
-      setTopArticles(articlesWithTitles);
+
+      // Sort by views
+      articlesWithStats.sort((a, b) => b.views - a.views);
+      setTopArticles(articlesWithStats);
 
       // Charger les statistiques journalières du premier article
-      if (articlesWithTitles.length > 0) {
-        const stats = await statsService.getDailyStats(articlesWithTitles[0].articleId, selectedPeriod);
+      if (articlesWithStats.length > 0) {
+        const stats = await statsService.getDailyStats(articlesWithStats[0].id);
         setDailyStats(stats);
       }
     } catch (err) {
@@ -81,42 +97,42 @@ export default function StatsDashboard() {
   };
 
   const viewsData = {
-    labels: dailyStats.map(stat => stat.date),
+    labels: dailyStats.map(stat => new Date(stat.date).toLocaleDateString()),
     datasets: [
       {
         label: 'Vues',
         data: dailyStats.map(stat => stat.views),
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.5)',
-        tension: 0.4
+        borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1,
+        fill: false
       },
       {
         label: 'Visiteurs uniques',
-        data: dailyStats.map(stat => stat.uniqueVisitors),
-        borderColor: 'rgb(16, 185, 129)',
-        backgroundColor: 'rgba(16, 185, 129, 0.5)',
-        tension: 0.4
+        data: dailyStats.map(stat => stat.unique_visitors),
+        borderColor: 'rgb(255, 99, 132)',
+        tension: 0.1,
+        fill: false
       }
     ]
   };
 
   const deviceData = {
-    labels: ['Mobile', 'Desktop', 'Tablet'],
+    labels: ['Mobile', 'Desktop', 'Tablette'],
     datasets: [{
-      data: topArticles.length > 0 ? [
-        topArticles[0].deviceStats.mobile,
-        topArticles[0].deviceStats.desktop,
-        topArticles[0].deviceStats.tablet
-      ] : [],
+      data: [
+        topArticles[0]?.device_stats.mobile || 0,
+        topArticles[0]?.device_stats.desktop || 0,
+        topArticles[0]?.device_stats.tablet || 0
+      ],
       backgroundColor: [
-        'rgba(59, 130, 246, 0.5)',
-        'rgba(16, 185, 129, 0.5)',
-        'rgba(251, 191, 36, 0.5)'
+        'rgba(255, 99, 132, 0.2)',
+        'rgba(75, 192, 192, 0.2)',
+        'rgba(153, 102, 255, 0.2)'
       ],
       borderColor: [
-        'rgb(59, 130, 246)',
-        'rgb(16, 185, 129)',
-        'rgb(251, 191, 36)'
+        'rgb(255, 99, 132)',
+        'rgb(75, 192, 192)',
+        'rgb(153, 102, 255)'
       ],
       borderWidth: 1
     }]
@@ -125,12 +141,12 @@ export default function StatsDashboard() {
   const sharesData = {
     labels: ['Facebook', 'Twitter', 'LinkedIn', 'Email'],
     datasets: [{
-      data: topArticles.length > 0 ? [
-        topArticles[0].shares.facebook,
-        topArticles[0].shares.twitter,
-        topArticles[0].shares.linkedin,
-        topArticles[0].shares.email
-      ] : [],
+      data: [
+        topArticles[0]?.shares.facebook || 0,
+        topArticles[0]?.shares.twitter || 0,
+        topArticles[0]?.shares.linkedin || 0,
+        topArticles[0]?.shares.email || 0
+      ],
       backgroundColor: [
         'rgba(66, 103, 178, 0.5)',
         'rgba(29, 161, 242, 0.5)',
@@ -147,6 +163,19 @@ export default function StatsDashboard() {
     }]
   };
 
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: 'Statistiques des vues'
+      }
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6">
       <div className="flex justify-between items-center mb-8">
@@ -155,12 +184,12 @@ export default function StatsDashboard() {
         </h1>
         <select
           value={selectedPeriod}
-          onChange={(e) => setSelectedPeriod(Number(e.target.value))}
+          onChange={(e) => setSelectedPeriod(e.target.value as '7d' | '30d' | '90d')}
           className="ml-4 block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
         >
-          <option value={7}>7 jours</option>
-          <option value={30}>30 jours</option>
-          <option value={90}>90 jours</option>
+          <option value="7d">7 jours</option>
+          <option value="30d">30 jours</option>
+          <option value="90d">90 jours</option>
         </select>
       </div>
 
@@ -203,10 +232,10 @@ export default function StatsDashboard() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-gray-900">
-                    {statsService.formatNumber(article.uniqueVisitors)} visiteurs
+                    {statsService.formatNumber(article.unique_visitors)} visiteurs
                   </p>
                   <p className="text-sm text-gray-500">
-                    {Math.round((article.uniqueVisitors / article.views) * 100)}% uniques
+                    {Math.round((article.unique_visitors / article.views) * 100)}% uniques
                   </p>
                 </div>
               </div>
@@ -222,15 +251,7 @@ export default function StatsDashboard() {
           <div className="h-64">
             <Line
               data={viewsData}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  y: {
-                    beginAtZero: true
-                  }
-                }
-              }}
+              options={options}
             />
           </div>
         </div>

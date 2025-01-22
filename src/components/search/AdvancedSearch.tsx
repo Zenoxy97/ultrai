@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { SearchFilters, SearchResults, searchService } from '../../services/searchService';
+import { SearchFilters, searchService } from '../../services/searchService';
 import { Article } from '../../types/Article';
+
+interface SearchResults {
+  articles: Article[];
+  hasMore: boolean;
+  lastDoc?: number;
+  total: number;
+}
 
 export const AdvancedSearch: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,7 +54,8 @@ export const AdvancedSearch: React.FC = () => {
       setResults({
         articles: [...(results?.articles || []), ...(nextResults?.articles || [])],
         hasMore: nextResults.hasMore,
-        lastDoc: nextResults.lastDoc
+        lastDoc: nextResults.lastDoc,
+        total: nextResults.total
       });
     } catch (error) {
       console.error('Erreur lors du chargement de plus de résultats:', error);
@@ -67,7 +75,7 @@ export const AdvancedSearch: React.FC = () => {
           <p className="text-gray-600 mb-2" dangerouslySetInnerHTML={{ __html: highlightedDescription }} />
         )}
         <div className="flex flex-wrap gap-2">
-          {article.tags.map(tag => (
+          {article.tags?.map(tag => (
             <span
               key={tag}
               className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded"
@@ -183,7 +191,7 @@ export const AdvancedSearch: React.FC = () => {
         <div>
           <div className="mb-4">
             <h2 className="text-lg font-semibold">
-              {results.articles.length} résultat(s) trouvé(s)
+              {results.articles.length} résultat(s) trouvé(s) sur {results.total}
             </h2>
           </div>
 

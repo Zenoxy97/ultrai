@@ -1,163 +1,168 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Article, articleService } from '../../services/articleService';
-import { useAuth } from '../../contexts/AuthContext';
+import { Article } from '@/types/Article';
+import { articleService } from '@/services/articleService';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
+
+interface DashboardStats {
+  totalArticles: number;
+  publishedArticles: number;
+  totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+}
 
 export default function Dashboard() {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { signOut } = useAuth();
+  const [stats, setStats] = useState<DashboardStats>({
+    totalArticles: 0,
+    publishedArticles: 0,
+    totalViews: 0,
+    totalLikes: 0,
+    totalComments: 0,
+  });
+  const [recentArticles, setRecentArticles] = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    loadArticles();
+    fetchDashboardData();
   }, []);
 
-  const loadArticles = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const articles = await articleService.getAllArticles();
-      setArticles(articles);
-    } catch (err) {
-      setError('Erreur lors du chargement des articles');
-      console.error(err);
+      const articles = await articleService.getArticles();
+
+      // Calculer les statistiques
+      const publishedArticles = articles.filter(article => article.status === 'published');
+      const totalViews = articles.reduce((acc, article) => acc + (article.views || 0), 0);
+      const totalLikes = articles.reduce((acc, article) => acc + (article.likes || 0), 0);
+      const totalComments = articles.reduce((acc, article) => acc + (article.comments_count || 0), 0);
+
+      setStats({
+        totalArticles: articles.length,
+        publishedArticles: publishedArticles.length,
+        totalViews,
+        totalLikes,
+        totalComments,
+      });
+
+      // Récupérer les 5 articles les plus récents
+      setRecentArticles(articles.slice(0, 5));
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de charger les données du tableau de bord.',
+        variant: 'destructive',
+      });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const handleDeleteArticle = async (id: string) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet article ?')) {
-      return;
-    }
-
-    try {
-      await articleService.deleteArticle(id);
-      setArticles(articles.filter(article => article.id !== id));
-    } catch (err) {
-      setError('Erreur lors de la suppression de l\'article');
-      console.error(err);
-    }
-  };
-
-  const handleTogglePublish = async (article: Article) => {
+  const toggleArticleStatus = async (article: Article) => {
     if (!article.id) return;
 
     try {
+      const newStatus = article.status === 'published' ? 'draft' : 'published';
       await articleService.updateArticle(article.id, {
-        published: !article.published
+        status: newStatus,
+        published_at: newStatus === 'published' ? new Date().toISOString() : null,
       });
-      setArticles(articles.map(a => 
-        a.id === article.id 
-          ? { ...a, published: !a.published }
-          : a
-      ));
-    } catch (err) {
-      setError('Erreur lors de la modification du statut de l\'article');
-      console.error(err);
+
+      setRecentArticles(prevArticles =>
+        prevArticles.map(a =>
+          a.id === article.id
+            ? { ...a, status: newStatus }
+            : a
+        )
+      );
+
+      toast({
+        title: 'Succès',
+        description: `Article ${newStatus === 'published' ? 'publié' : 'dépublié'}.`,
+      });
+    } catch (error) {
+      console.error('Error toggling article status:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de modifier le statut de l\'article.',
+        variant: 'destructive',
+      });
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-100 p-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse flex space-x-4">
-            <div className="flex-1 space-y-4 py-1">
-              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-              <div className="space-y-2">
-                <div className="h-4 bg-gray-200 rounded"></div>
-                <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Tableau de bord</h1>
-          <div className="space-x-4">
-            <Link
-              to="/admin/articles/new"
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-            >
-              Nouvel article
-            </Link>
-            <button
-              onClick={() => signOut()}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-            >
-              Déconnexion
-            </button>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Tableau de bord</h1>
 
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-            {error}
-          </div>
-        )}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Articles totaux</h3>
+          <p className="mt-2 text-3xl font-bold">{stats.totalArticles}</p>
+        </Card>
 
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
-          <ul className="divide-y divide-gray-200">
-            {articles.map((article) => (
-              <li key={article.id}>
-                <div className="px-4 py-4 flex items-center justify-between sm:px-6">
-                  <div className="flex items-center">
-                    <div className="min-w-0 flex-1 sm:flex sm:items-center sm:justify-between">
-                      <div>
-                        <div className="flex text-sm">
-                          <p className="font-medium text-blue-600 truncate">
-                            {article.title}
-                          </p>
-                          <p className="ml-1 flex-shrink-0 font-normal text-gray-500">
-                            {article.published ? 'Publié' : 'Brouillon'}
-                          </p>
-                        </div>
-                        <div className="mt-2 flex">
-                          <div className="flex items-center text-sm text-gray-500">
-                            <p>
-                              {new Date(article.date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="ml-5 flex-shrink-0 flex space-x-2">
-                    <button
-                      onClick={() => handleTogglePublish(article)}
-                      className={`inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md ${
-                        article.published
-                          ? 'text-yellow-700 bg-yellow-100 hover:bg-yellow-200'
-                          : 'text-green-700 bg-green-100 hover:bg-green-200'
-                      }`}
-                    >
-                      {article.published ? 'Dépublier' : 'Publier'}
-                    </button>
-                    <Link
-                      to={`/admin/articles/${article.id}/edit`}
-                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200"
-                    >
-                      Modifier
-                    </Link>
-                    <button
-                      onClick={() => article.id && handleDeleteArticle(article.id)}
-                      className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200"
-                    >
-                      Supprimer
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Articles publiés</h3>
+          <p className="mt-2 text-3xl font-bold">{stats.publishedArticles}</p>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Vues totales</h3>
+          <p className="mt-2 text-3xl font-bold">{stats.totalViews}</p>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Likes totaux</h3>
+          <p className="mt-2 text-3xl font-bold">{stats.totalLikes}</p>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-medium text-gray-500">Commentaires totaux</h3>
+          <p className="mt-2 text-3xl font-bold">{stats.totalComments}</p>
+        </Card>
       </div>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-medium mb-4">Articles récents</h2>
+        <div className="divide-y">
+          {recentArticles.map(article => (
+            <div
+              key={article.id}
+              className="py-4 flex items-center justify-between"
+            >
+              <div>
+                <Link
+                  to={`/admin/articles/${article.id}/edit`}
+                  className="text-sm font-medium hover:underline"
+                >
+                  {article.title}
+                </Link>
+                <p className="mt-1 text-sm text-gray-500">
+                  {article.status === 'published' ? 'Publié' : 'Brouillon'}
+                </p>
+              </div>
+              <Button
+                variant={article.status === 'published' ? 'destructive' : 'default'}
+                onClick={() => toggleArticleStatus(article)}
+              >
+                {article.status === 'published' ? 'Dépublier' : 'Publier'}
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

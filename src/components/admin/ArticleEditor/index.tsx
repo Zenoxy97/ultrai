@@ -1,192 +1,106 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Article } from '@/types/Article';
-import { supabase } from '@/config/supabase';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import Editor from './Editor';
-import ImageUpload from './ImageUpload';
-import TagInput from './TagInput';
-import slugify from 'slugify';
+import { articleService } from '@/services/articleService';
+import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArticleForm } from './ArticleForm';
+import { Markdown } from '@/components/ui/markdown';
 
-interface ArticleEditorProps {
-  article?: Article;
-  onSuccess?: () => void;
-}
+function ArticleEditor() {
+  const { id } = useParams<{ id: string }>();
+  const [article, setArticle] = useState<Partial<Article> | undefined>();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
 
-export default function ArticleEditor({ article, onSuccess }: ArticleEditorProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
-  const { register, handleSubmit, watch, setValue } = useForm<Article>({
-    defaultValues: article || {
-      title: '',
-      content: '',
-      excerpt: '',
-      status: 'draft',
-      categories: [],
-      tags: [],
-      author: { name: 'Admin' },
-    },
-  });
+  useEffect(() => {
+    if (id) {
+      loadArticle();
+    }
+  }, [id]);
 
-  const handleImageUpload = async (file: File): Promise<string> => {
-    const filename = `${Date.now()}-${file.name}`;
-    const { data, error } = await supabase.storage
-      .from('articles')
-      .upload(filename, file);
-
-    if (error) throw error;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('articles')
-      .getPublicUrl(data.path);
-
-    return publicUrl;
-  };
-
-  const onSubmit = async (data: Article) => {
+  const loadArticle = async () => {
     try {
-      setIsLoading(true);
-
-      // Générer le slug à partir du titre
-      const slug = slugify(data.title, { lower: true, strict: true });
-
-      // Préparer les données de l'article
-      const articleData = {
-        ...data,
-        slug,
-        updated_at: new Date().toISOString(),
-        published_at: data.status === 'published' ? new Date().toISOString() : null,
-      };
-
-      if (article?.id) {
-        // Mise à jour
-        const { error } = await supabase
-          .from('articles')
-          .update(articleData)
-          .eq('id', article.id);
-
-        if (error) throw error;
-      } else {
-        // Création
-        const { error } = await supabase
-          .from('articles')
-          .insert([articleData]);
-
-        if (error) throw error;
-      }
-
-      toast({
-        title: 'Succès',
-        description: `Article ${article ? 'modifié' : 'créé'} avec succès.`,
-      });
-
-      onSuccess?.();
+      setLoading(true);
+      const data = await articleService.getArticle(id!);
+      setArticle(data);
     } catch (error) {
-      console.error('Error saving article:', error);
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de sauvegarder l\'article.',
-        variant: 'destructive',
-      });
+      console.error('Error loading article:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
+  const handleSubmit = async (data: Partial<Article>) => {
+    try {
+      setSaving(true);
+      const input = {
+        ...data,
+        title: data.title!,
+        content: data.content!,
+        status: data.status || 'draft',
+        tags: data.tags || [],
+      };
+
+      if (id) {
+        await articleService.updateArticle(id, input);
+      } else {
+        await articleService.createArticle(input);
+      }
+      // Redirect to articles list or show success message
+    } catch (error) {
+      console.error('Error saving article:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Titre</label>
-        <Input
-          {...register('title', { required: true })}
-          className="mt-1"
-          placeholder="Titre de l'article"
-        />
-      </div>
+    <div className="container mx-auto py-8">
+      <Card className="p-6">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'write' | 'preview')}>
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">
+              {id ? 'Edit Article' : 'New Article'}
+            </h1>
+            <TabsList>
+              <TabsTrigger value="write">Write</TabsTrigger>
+              <TabsTrigger value="preview">Preview</TabsTrigger>
+            </TabsList>
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Image de couverture
-        </label>
-        <ImageUpload
-          currentImage={watch('cover_image')}
-          onUpload={async (file) => {
-            try {
-              const url = await handleImageUpload(file);
-              setValue('cover_image', url);
-            } catch (error) {
-              console.error('Error uploading image:', error);
-              toast({
-                title: 'Erreur',
-                description: 'Impossible de télécharger l\'image.',
-                variant: 'destructive',
-              });
-            }
-          }}
-        />
-      </div>
+          <TabsContent value="write">
+            <ArticleForm
+              article={article}
+              onSubmit={handleSubmit}
+              isLoading={saving}
+            />
+          </TabsContent>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Extrait</label>
-        <Textarea
-          {...register('excerpt')}
-          className="mt-1"
-          placeholder="Bref résumé de l'article"
-          rows={3}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">Contenu</label>
-        <Editor
-          content={watch('content')}
-          onChange={(content) => setValue('content', content)}
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            Catégories
-          </label>
-          <TagInput
-            value={watch('categories') || []}
-            onChange={(categories) => setValue('categories', categories)}
-            placeholder="Ajouter une catégorie"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Tags</label>
-          <TagInput
-            value={watch('tags') || []}
-            onChange={(tags) => setValue('tags', tags)}
-            placeholder="Ajouter un tag"
-          />
-        </div>
-      </div>
-
-      <div className="flex justify-end space-x-4">
-        <Button
-          type="submit"
-          disabled={isLoading}
-          variant="outline"
-          onClick={() => setValue('status', 'draft')}
-        >
-          Enregistrer comme brouillon
-        </Button>
-        <Button
-          type="submit"
-          disabled={isLoading}
-          className="bg-blue-600 hover:bg-blue-700"
-          onClick={() => setValue('status', 'published')}
-        >
-          {isLoading ? 'Publication...' : 'Publier'}
-        </Button>
-      </div>
-    </form>
+          <TabsContent value="preview">
+            {article ? (
+              <article className="prose prose-lg max-w-none">
+                <h1 className="text-4xl font-bold mb-4">{article.title}</h1>
+                {article.excerpt && (
+                  <p className="text-xl text-gray-600 mb-8">{article.excerpt}</p>
+                )}
+                <Markdown content={article.content || ''} />
+              </article>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No content to preview
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </Card>
+    </div>
   );
 }
+
+export default ArticleEditor;

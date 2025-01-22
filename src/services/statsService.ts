@@ -1,236 +1,103 @@
-import { 
-  collection,
-  query,
-  where,
-  orderBy,
-  getDocs,
-  writeBatch,
-  limit as firestoreLimit,
-  Timestamp,
-  doc,
-  setDoc,
-  getDoc,
-  increment as firestoreIncrement,
-  serverTimestamp
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '@/lib/supabase';
 
 export interface ArticleStats {
-  id?: string;
-  articleId: string;
+  id: string;
+  title: string;
   views: number;
-  uniqueVisitors: number;
-  readTime: number;
+  unique_visitors: number;
+  device_stats: {
+    mobile: number;
+    desktop: number;
+    tablet: number;
+  };
   shares: {
     facebook: number;
     twitter: number;
     linkedin: number;
     email: number;
   };
-  engagement: {
-    scrollDepth: number;
-    timeOnPage: number;
-    commentCount: number;
-    likeCount: number;
-  };
-  deviceStats: {
-    mobile: number;
-    desktop: number;
-    tablet: number;
-  };
-  referrers: { [key: string]: number };
-  updatedAt: Date;
+  article_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DailyStats {
   date: string;
   views: number;
-  uniqueVisitors: number;
-  articleId: string;
+  unique_visitors: number;
+  device_stats: {
+    mobile: number;
+    desktop: number;
+    tablet: number;
+  };
+  shares: {
+    facebook: number;
+    twitter: number;
+    linkedin: number;
+    email: number;
+  };
 }
 
-export interface Stats {
-  id: string;
-  articleId: string;
-  views: number;
-  likes: number;
-  shares: number;
-  comments: number;
-  date: Date;
-}
+class StatsService {
+  private readonly table = 'article_stats';
 
-export const statsService = {
-  // Enregistrer une vue d'article
-  async recordView(articleId: string, data: {
-    isUnique?: boolean;
-    device: 'mobile' | 'desktop' | 'tablet';
-    referrer?: string;
-  }): Promise<void> {
-    const statsRef = doc(db, 'articleStats', articleId);
-    const dailyStatsRef = doc(db, 'dailyStats', `${articleId}_${this.getToday()}`);
+  async getArticleStats(articleId: string): Promise<ArticleStats> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select(`
+        *,
+        articles!article_id (
+          id,
+          title
+        )
+      `)
+      .eq('article_id', articleId)
+      .single();
 
-    const batch = writeBatch(db);
-
-    // Mise à jour des stats globales
-    batch.set(statsRef, {
-      articleId,
-      views: firestoreIncrement(1),
-      uniqueVisitors: firestoreIncrement(data.isUnique ? 1 : 0),
-      [`deviceStats.${data.device}`]: firestoreIncrement(1),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    if (data.referrer) {
-      batch.set(statsRef, {
-        [`referrers.${data.referrer}`]: firestoreIncrement(1)
-      }, { merge: true });
-    }
-
-    // Mise à jour des stats journalières
-    batch.set(dailyStatsRef, {
-      articleId,
-      date: this.getToday(),
-      views: firestoreIncrement(1),
-      uniqueVisitors: firestoreIncrement(data.isUnique ? 1 : 0)
-    }, { merge: true });
-
-    await batch.commit();
-  },
-
-  // Enregistrer l'engagement
-  async recordEngagement(articleId: string, data: {
-    scrollDepth?: number;
-    timeOnPage?: number;
-  }): Promise<void> {
-    const statsRef = doc(db, 'articleStats', articleId);
-    await setDoc(statsRef, {
-      engagement: {
-        scrollDepth: data.scrollDepth,
-        timeOnPage: data.timeOnPage
-      },
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-  },
-
-  // Enregistrer un partage
-  async recordShare(articleId: string, platform: 'facebook' | 'twitter' | 'linkedin' | 'email'): Promise<void> {
-    const statsRef = doc(db, 'articleStats', articleId);
-    await setDoc(statsRef, {
-      [`shares.${platform}`]: firestoreIncrement(1),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-  },
-
-  // Obtenir les statistiques d'un article
-  async getArticleStats(articleId: string): Promise<ArticleStats | null> {
-    const docRef = doc(db, 'articleStats', articleId);
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) {
-      return null;
-    }
+    if (error) throw error;
 
     return {
-      id: docSnap.id,
-      ...docSnap.data(),
-      updatedAt: (docSnap.data().updatedAt as Timestamp).toDate()
-    } as ArticleStats;
-  },
+      id: data.id,
+      title: data.articles.title,
+      views: data.views,
+      unique_visitors: data.unique_visitors,
+      device_stats: data.device_stats,
+      shares: data.shares,
+      article_id: data.article_id,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+  }
 
-  // Obtenir les statistiques journalières d'un article
-  async getDailyStats(articleId: string, days: number = 30): Promise<DailyStats[]> {
-    const startDate = this.getDateBefore(days);
-    const statsRef = collection(db, 'dailyStats');
-    const q = query(
-      statsRef,
-      where('articleId', '==', articleId),
-      where('date', '>=', startDate),
-      orderBy('date', 'desc')
-    );
+  async getDailyStats(articleId: string): Promise<DailyStats[]> {
+    const { data, error } = await supabase
+      .from('daily_stats')
+      .select('*')
+      .eq('article_id', articleId)
+      .order('date', { ascending: true });
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data() as DailyStats);
-  },
+    if (error) throw error;
+    return data;
+  }
 
-  // Obtenir les articles les plus vus
-  async getMostViewedArticles(limit: number = 10): Promise<ArticleStats[]> {
-    const statsRef = collection(db, 'articleStats');
-    const q = query(
-      statsRef,
-      orderBy('views', 'desc'),
-      firestoreLimit(limit)
-    );
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      updatedAt: (doc.data().updatedAt as Timestamp).toDate()
-    })) as ArticleStats[];
-  },
-
-  // Obtenir les articles les plus engageants
-  async getMostEngagingArticles(limit: number = 10): Promise<ArticleStats[]> {
-    const statsRef = collection(db, 'articleStats');
-    const q = query(
-      statsRef,
-      orderBy('engagement.timeOnPage', 'desc'),
-      firestoreLimit(limit)
-    );
-
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      updatedAt: (doc.data().updatedAt as Timestamp).toDate()
-    })) as ArticleStats[];
-  },
-
-  // Obtenir les statistiques
-  async getStats(startDate: Date, endDate: Date, maxResults: number = 10): Promise<Stats[]> {
-    const statsRef = collection(db, 'stats');
-    const q = query(
-      statsRef,
-      where('date', '>=', startDate),
-      where('date', '<=', endDate),
-      orderBy('date', 'desc'),
-      firestoreLimit(maxResults)
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      date: (doc.data().date as Timestamp).toDate()
-    })) as Stats[];
-  },
-
-  // Mettre à jour les statistiques
-  async updateStats(stats: Stats): Promise<void> {
-    const batch = writeBatch(db);
-    const statsRef = doc(db, 'stats', stats.id);
-    batch.update(statsRef, {
-      views: stats.views,
-      likes: stats.likes,
-      shares: stats.shares,
-      comments: stats.comments,
-      date: Timestamp.fromDate(stats.date)
+  async incrementView(articleId: string, deviceType: 'mobile' | 'desktop' | 'tablet'): Promise<void> {
+    const { error } = await supabase.rpc('increment_article_view', {
+      article_id: articleId,
+      device_type: deviceType,
     });
-    await batch.commit();
-  },
 
-  // Utilitaires
-  getToday(): string {
-    return new Date().toISOString().split('T')[0];
-  },
+    if (error) throw error;
+  }
 
-  getDateBefore(days: number): string {
-    const date = new Date();
-    date.setDate(date.getDate() - days);
-    return date.toISOString().split('T')[0];
-  },
+  async incrementShare(articleId: string, platform: keyof ArticleStats['shares']): Promise<void> {
+    const { error } = await supabase.rpc('increment_article_share', {
+      article_id: articleId,
+      platform,
+    });
 
-  // Formater les nombres
+    if (error) throw error;
+  }
+
   formatNumber(num: number): string {
     if (num >= 1000000) {
       return (num / 1000000).toFixed(1) + 'M';
@@ -239,14 +106,7 @@ export const statsService = {
       return (num / 1000).toFixed(1) + 'k';
     }
     return num.toString();
-  },
-
-  // Formater le temps de lecture
-  formatReadTime(seconds: number): string {
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 1) {
-      return 'moins d\'une minute';
-    }
-    return `${minutes} minute${minutes > 1 ? 's' : ''}`;
   }
-};
+}
+
+export const statsService = new StatsService();

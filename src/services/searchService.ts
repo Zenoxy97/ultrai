@@ -1,101 +1,124 @@
-import { 
-  collection,
-  query as firestoreQuery,
-  limit as firestoreLimit,
-  startAfter,
-  getDocs,
-  DocumentData,
-  QueryDocumentSnapshot,
-  where,
-  orderBy
-} from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { Article } from '../types/Article';
+import { supabase } from '@/lib/supabase';
+import { Article } from '@/types/Article';
 
 export interface SearchFilters {
-  category?: string;
+  categories?: string[];
   tags?: string[];
-  author?: string;
-  startDate?: Date;
-  endDate?: Date;
+  dateRange?: {
+    start: string;
+    end: string;
+  };
   status?: 'draft' | 'published';
+  category?: string;
+  author?: string;
 }
 
 export interface SearchResults {
   articles: Article[];
+  total: number;
   hasMore: boolean;
-  lastDoc: QueryDocumentSnapshot<DocumentData> | null;
+  lastDoc?: number;
 }
 
-export interface SearchStats {
-  totalResults: number;
-  searchTime: number;
-  categories: { [key: string]: number };
-  tags: { [key: string]: number };
-}
+class SearchService {
+  private readonly table = 'articles';
 
-export const searchService = {
-  async searchArticles(searchQuery: string, filters: SearchFilters = {}, pageSize: number = 10, lastDoc: QueryDocumentSnapshot<DocumentData> | null = null): Promise<SearchResults> {
-    const articlesRef = collection(db, 'articles');
-    let q = firestoreQuery(articlesRef, where('published', '==', true));
+  async searchArticles(
+    query: string,
+    filters?: SearchFilters,
+    limit: number = 10,
+    startAfter?: number
+  ): Promise<SearchResults> {
+    let dbQuery = supabase
+      .from(this.table)
+      .select('*', { count: 'exact' });
 
-    if (searchQuery) {
-      q = firestoreQuery(q, where('searchTokens', 'array-contains', searchQuery.toLowerCase()));
+    // Appliquer la recherche textuelle
+    if (query) {
+      dbQuery = dbQuery.textSearch('title', query, {
+        type: 'websearch',
+        config: 'french'
+      });
     }
 
-    if (filters.category) {
-      q = firestoreQuery(q, where('category', '==', filters.category));
+    // Appliquer les filtres
+    if (filters) {
+      if (filters.categories?.length) {
+        dbQuery = dbQuery.contains('categories', filters.categories);
+      }
+      if (filters.category) {
+        dbQuery = dbQuery.eq('category', filters.category);
+      }
+      if (filters.author) {
+        dbQuery = dbQuery.eq('author_id', filters.author);
+      }
+      if (filters.tags?.length) {
+        dbQuery = dbQuery.contains('tags', filters.tags);
+      }
+      if (filters.dateRange) {
+        dbQuery = dbQuery
+          .gte('created_at', filters.dateRange.start)
+          .lte('created_at', filters.dateRange.end);
+      }
+      if (filters.status) {
+        dbQuery = dbQuery.eq('status', filters.status);
+      }
     }
 
-    if (filters.tags && filters.tags.length > 0) {
-      q = firestoreQuery(q, where('tags', 'array-contains-any', filters.tags));
+    // Pagination
+    if (startAfter) {
+      dbQuery = dbQuery.gt('id', startAfter);
     }
+    dbQuery = dbQuery.limit(limit);
 
-    if (filters.author) {
-      q = firestoreQuery(q, where('author', '==', filters.author));
-    }
+    const { data, error, count } = await dbQuery;
 
-    q = firestoreQuery(q, orderBy('date', 'desc'));
-    q = firestoreQuery(q, firestoreLimit(pageSize + 1));
-
-    if (lastDoc) {
-      q = firestoreQuery(q, startAfter(lastDoc));
-    }
-
-    const snapshot = await getDocs(q);
-    const docs = snapshot.docs;
-    const hasMore = docs.length > pageSize;
-    const lastVisible = hasMore ? docs[docs.length - 2] : null;
-    
-    const articles = docs.slice(0, pageSize).map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Article));
+    if (error) throw error;
 
     return {
-      articles,
-      hasMore,
-      lastDoc: lastVisible
+      articles: data || [],
+      total: count || 0,
+      hasMore: (data?.length || 0) === limit,
+      lastDoc: data?.length ? data[data.length - 1].id : undefined
     };
-  },
+  }
 
-  async getSuggestions(searchQuery: string, limit: number = 5): Promise<string[]> {
-    const articlesRef = collection(db, 'articles');
-    const q = firestoreQuery(
-      articlesRef,
-      where('published', '==', true),
-      where('searchTokens', 'array-contains', searchQuery.toLowerCase()),
-      orderBy('title'),
-      firestoreLimit(limit)
-    );
+  async getSuggestions(query: string): Promise<string[]> {
+    if (!query) return [];
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data().title);
-  },
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('title')
+      .textSearch('title', query, {
+        type: 'websearch',
+        config: 'french'
+      })
+      .limit(5);
 
-  highlightSearchTerms(text: string, query: string): string {
-    if (!text || !query) return text;
-    const regex = new RegExp(`(${query})`, 'gi');
+    if (error) throw error;
+
+    return data.map(article => article.title);
+  }
+
+  highlightSearchTerm(text: string, term: string): string {
+    if (!term) return text;
+    const regex = new RegExp(`(${term})`, 'gi');
     return text.replace(regex, '<mark>$1</mark>');
   }
-};
+
+  highlightSearchTerms(text: string, query: string): string {
+    if (!query.trim() || !text) return text;
+
+    const terms = query.toLowerCase().split(/\s+/);
+    let highlightedText = text;
+
+    terms.forEach(term => {
+      const regex = new RegExp(`(${term})`, 'gi');
+      highlightedText = highlightedText.replace(regex, '<mark>$1</mark>');
+    });
+
+    return highlightedText;
+  }
+}
+
+export const searchService = new SearchService();

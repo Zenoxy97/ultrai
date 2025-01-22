@@ -1,98 +1,176 @@
-import { collection, query, where, orderBy, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
+import { supabase } from '@/lib/supabase';
+import { Article, ArticleInput } from '@/types/Article';
 
-export interface Article {
-  id?: string;
-  title: string;
-  content: string;
-  slug: string;
-  imageUrl?: string;
-  published: boolean;
-  date: Date;
-  tags: string[];
-  category: string;
-}
+class ArticleService {
+  private readonly table = 'articles';
 
-export const articleService = {
-  // Récupérer tous les articles publiés
-  async getPublishedArticles(): Promise<Article[]> {
-    const q = query(
-      collection(db, 'articles'),
-      where('published', '==', true),
-      orderBy('date', 'desc')
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Article));
-  },
-
-  // Récupérer tous les articles (publiés et brouillons) pour l'admin
-  async getAllArticles(): Promise<Article[]> {
-    const q = query(
-      collection(db, 'articles'),
-      orderBy('date', 'desc')
-    );
-    
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Article));
-  },
-
-  // Récupérer un article par son id
-  async getArticle(id: string): Promise<Article | null> {
-    const docRef = doc(db, 'articles', id);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as Article;
-    }
-    return null;
-  },
-
-  // Créer un nouvel article
-  async createArticle(article: Omit<Article, 'id'>): Promise<string> {
-    const docRef = await addDoc(collection(db, 'articles'), {
-      ...article,
-      date: new Date()
-    });
-    return docRef.id;
-  },
-
-  // Mettre à jour un article
-  async updateArticle(id: string, article: Partial<Article>): Promise<void> {
-    const docRef = doc(db, 'articles', id);
-    await updateDoc(docRef, article);
-  },
-
-  // Supprimer un article
-  async deleteArticle(id: string): Promise<void> {
-    const docRef = doc(db, 'articles', id);
-    await deleteDoc(docRef);
-  },
-
-  // Upload une image
-  async uploadImage(file: File, path: string): Promise<string> {
-    const storageRef = ref(storage, `articles/${path}`);
-    await uploadBytes(storageRef, file);
-    return getDownloadURL(storageRef);
-  },
-
-  // Supprimer une image
-  async deleteImage(path: string): Promise<void> {
-    const storageRef = ref(storage, path);
-    await deleteObject(storageRef);
-  },
-
-  // Générer un slug unique
-  generateSlug(title: string): string {
+  public generateSlug(title: string): string {
     return title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
+      .replace(/(^-|-$)/g, '');
   }
-};
+
+  async getArticles(options?: {
+    status?: 'draft' | 'published';
+    limit?: number;
+    offset?: number;
+  }): Promise<Article[]> {
+    let query = supabase
+      .from(this.table)
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (options?.status) {
+      query = query.eq('status', options.status);
+    }
+
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+
+    if (options?.offset) {
+      query = query.range(options.offset, options.offset + (options.limit || 10) - 1);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data as Article[];
+  }
+
+  async getArticle(id: string): Promise<Article> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async getArticleBySlug(slug: string): Promise<Article> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('*')
+      .eq('slug', slug)
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async createArticle(articleInput: ArticleInput): Promise<Article> {
+    const now = new Date().toISOString();
+
+    const article = {
+      ...articleInput,
+      slug: this.generateSlug(articleInput.title),
+      created_at: now,
+      updated_at: now,
+      published_at: articleInput.status === 'published' ? now : null,
+    };
+
+    const { data, error } = await supabase
+      .from(this.table)
+      .insert([article])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async updateArticle(id: string, articleInput: Partial<ArticleInput>): Promise<Article> {
+    const updates: any = {
+      ...articleInput,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (articleInput.title) {
+      updates.slug = this.generateSlug(articleInput.title);
+    }
+
+    if (articleInput.status === 'published') {
+      updates.published_at = new Date().toISOString();
+    } else if (articleInput.status === 'draft') {
+      updates.published_at = null;
+    }
+
+    const { data, error } = await supabase
+      .from(this.table)
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async deleteArticle(id: string): Promise<void> {
+    const { error } = await supabase
+      .from(this.table)
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
+
+  async publishArticle(id: string): Promise<Article> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .update({
+        status: 'published',
+        published_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async unpublishArticle(id: string): Promise<Article> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .update({
+        status: 'draft',
+        published_at: null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Article;
+  }
+
+  async uploadImage(file: File): Promise<string> {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `article-images/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('public')
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from('public').getPublicUrl(filePath);
+    return data.publicUrl;
+  }
+
+  async deleteImage(path: string): Promise<void> {
+    const imagePath = path.split('/').pop() || '';
+    const { error } = await supabase.storage
+      .from('public')
+      .remove([`article-images/${imagePath}`]);
+    
+    if (error) throw error;
+  }
+}
+
+export const articleService = new ArticleService();

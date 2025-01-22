@@ -1,81 +1,120 @@
-import { ref, uploadBytes, getDownloadURL, listAll, deleteObject, getMetadata } from 'firebase/storage';
-import { storage } from '../config/firebase';
+import { supabase } from '@/lib/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface MediaFile {
+  id: string;
   name: string;
   url: string;
-  path: string;
-  type: string;
   size: number;
-  uploadedAt: Date;
+  type: string;
+  created_at: string;
+  updated_at: string;
+  article_id?: string;
+  user_id: string;
+  path: string;
 }
 
-export const mediaService = {
-  // Upload un fichier
-  async uploadFile(file: File, path: string): Promise<MediaFile> {
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(snapshot.ref);
+class MediaService {
+  private readonly bucket = 'media';
 
-    return {
+  async getFiles(folder?: string): Promise<MediaFile[]> {
+    const path = folder ? `${folder}/` : '';
+    const { data, error } = await supabase.storage
+      .from(this.bucket)
+      .list(path);
+
+    if (error) throw error;
+
+    return data.map(file => ({
+      id: file.id,
       name: file.name,
-      url,
-      path,
-      type: file.type,
-      size: file.size,
-      uploadedAt: new Date()
-    };
-  },
-
-  // Récupérer tous les fichiers d'un dossier
-  async getFiles(folder: string): Promise<MediaFile[]> {
-    const folderRef = ref(storage, folder);
-    const result = await listAll(folderRef);
-    
-    const files = await Promise.all(
-      result.items.map(async (itemRef) => {
-        const url = await getDownloadURL(itemRef);
-        const metadata = await getMetadata(itemRef);
-        
-        return {
-          name: itemRef.name,
-          url,
-          path: itemRef.fullPath,
-          type: metadata.contentType || '',
-          size: metadata.size || 0,
-          uploadedAt: new Date(metadata.timeCreated)
-        };
-      })
-    );
-
-    return files;
-  },
-
-  // Supprimer un fichier
-  async deleteFile(path: string): Promise<void> {
-    const fileRef = ref(storage, path);
-    await deleteObject(fileRef);
-  },
-
-  // Générer un nom de fichier unique
-  generateFileName(file: File): string {
-    const extension = file.name.split('.').pop();
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substring(2, 8);
-    return `${timestamp}-${randomString}.${extension}`;
-  },
-
-  // Vérifier si un fichier est une image
-  isImage(file: File): boolean {
-    return file.type.startsWith('image/');
-  },
-
-  // Formater la taille du fichier
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+      url: this.getPublicUrl(file.name, folder),
+      size: file.metadata.size,
+      type: file.metadata.mimetype,
+      created_at: file.created_at,
+      updated_at: file.updated_at,
+      path: folder ? `${folder}/${file.name}` : file.name,
+      user_id: file.metadata.user_id,
+    }));
   }
-};
+
+  async uploadFile(file: File, folder?: string): Promise<MediaFile> {
+    const path = folder ? `${folder}/` : '';
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${fileExt}`;
+    const filePath = `${path}${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(this.bucket)
+      .upload(filePath, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from(this.bucket)
+      .getPublicUrl(filePath);
+
+    const mediaFile: MediaFile = {
+      id: uuidv4(),
+      name: file.name,
+      url: publicUrl,
+      size: file.size,
+      type: file.type,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user_id: (await supabase.auth.getUser()).data.user?.id || '',
+      path: filePath,
+    };
+
+    return mediaFile;
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    const { error } = await supabase.storage
+      .from(this.bucket)
+      .remove([path]);
+
+    if (error) throw error;
+  }
+
+  getPublicUrl(fileName: string, folder?: string): string {
+    const path = folder ? `${folder}/${fileName}` : fileName;
+    const { data: { publicUrl } } = supabase.storage
+      .from(this.bucket)
+      .getPublicUrl(path);
+
+    return publicUrl;
+  }
+
+  async moveFile(oldPath: string, newPath: string): Promise<void> {
+    const { error: moveError } = await supabase.storage
+      .from(this.bucket)
+      .move(oldPath, newPath);
+
+    if (moveError) throw moveError;
+  }
+
+  async copyFile(sourcePath: string, destinationPath: string): Promise<void> {
+    const { error: copyError } = await supabase.storage
+      .from(this.bucket)
+      .copy(sourcePath, destinationPath);
+
+    if (copyError) throw copyError;
+  }
+
+  generateThumbnail(url: string, width: number = 200, height: number = 200): string {
+    const { data: { publicUrl } } = supabase.storage
+      .from(this.bucket)
+      .getPublicUrl(url, {
+        transform: {
+          width,
+          height,
+          resize: 'cover'
+        }
+      });
+
+    return publicUrl;
+  }
+}
+
+export const mediaService = new MediaService();

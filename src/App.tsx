@@ -1,132 +1,52 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Layout from './components/layout/Layout';
-import { Hero } from "./components/sections/Hero";
-import { LatestArticles } from "./components/sections/LatestArticles";
-import { Territories } from "./components/sections/Territories";
-import { Testimonials } from "./components/sections/Testimonials";
-import { RecommendedTools } from "./components/sections/RecommendedTools";
-import Services from "./components/sections/Services";
-import { ArticlePage } from "./pages/ArticlePage";
-import { ArticlesPage } from "./pages/ArticlesPage";
-import FloatingWhatsAppButton from './components/ui/FloatingWhatsAppButton';
-import Offre from './pages/offre';
-import Login from './components/admin/Login';
-import Dashboard from './components/admin/Dashboard';
-import ArticleEditor from './components/admin/ArticleEditor';
-import ProtectedRoute from './components/admin/ProtectedRoute';
-import CategoryManager from './components/admin/CategoryManager';
-import CommentModeration from './components/admin/CommentModeration';
-import StatsDashboard from './components/admin/StatsDashboard';
-import { AdvancedSearch } from './components/search/AdvancedSearch';
-import { AuthProvider } from './contexts/AuthContext';
-import LoginPage from './pages/admin/login';
-import ArticlesPage from './pages/admin/articles';
-import AdminLayout from './components/admin/AdminLayout';
-import DashboardPage from './pages/admin/dashboard';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from '@/components/ui/toaster';
+import { AuthProvider } from '@/contexts/AuthContext';
+import ProtectedRoute from '@/components/admin/ProtectedRoute';
+import AdminLayout from '@/layouts/AdminLayout';
+import Dashboard from '@/pages/admin/dashboard';
+import ArticleList from '@/components/admin/ArticleList';
+import { ArticleEditor } from '@/components/admin/ArticleEditor';
+import Settings from '@/pages/admin/settings';
+import Login from '@/pages/admin/login';
 
-function HomePage() {
-  return (
-    <>
-      <section id="home">
-        <Hero />
-      </section>
-      <Services />
-      <section id="articles">
-        <LatestArticles />
-      </section>
-      <section id="territories">
-        <Territories />
-      </section>
-      <section id="testimonials">
-        <Testimonials />
-      </section>
-      <section id="tools">
-        <RecommendedTools />
-      </section>
-    </>
-  );
-}
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 30, // 30 minutes
+    },
+  },
+});
 
-function App() {
+export default function App() {
   return (
-    <AuthProvider>
+    <QueryClientProvider client={queryClient}>
       <Router>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<HomePage />} />
-            <Route path="/articles" element={<ArticlesPage />} />
-            <Route path="/articles/:slug" element={<ArticlePage />} />
-            <Route path="/offre" element={<Offre />} />
-            <Route path="/admin/login" element={<LoginPage />} />
+        <AuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/admin/login" element={<Login />} />
+
+            {/* Protected Admin Routes */}
             <Route
-              path="/admin/*"
+              path="/admin"
               element={
                 <ProtectedRoute>
-                  <AdminLayout>
-                    <Routes>
-                      <Route path="/" element={<DashboardPage />} />
-                      <Route path="/dashboard" element={<DashboardPage />} />
-                      <Route path="/articles" element={<ArticlesPage />} />
-                    </Routes>
-                  </AdminLayout>
+                  <AdminLayout />
                 </ProtectedRoute>
               }
-            />
-            <Route
-              path="/admin/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/articles/new"
-              element={
-                <ProtectedRoute>
-                  <ArticleEditor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/articles/:id/edit"
-              element={
-                <ProtectedRoute>
-                  <ArticleEditor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/categories"
-              element={
-                <ProtectedRoute>
-                  <CategoryManager />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/comments"
-              element={
-                <ProtectedRoute>
-                  <CommentModeration />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/stats"
-              element={
-                <ProtectedRoute>
-                  <StatsDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/search" element={<AdvancedSearch />} />
-          </Route>
-        </Routes>
-        <FloatingWhatsAppButton />
+            >
+              <Route index element={<Dashboard />} />
+              <Route path="articles" element={<ArticleList />} />
+              <Route path="articles/new" element={<ArticleEditor />} />
+              <Route path="articles/:id/edit" element={<ArticleEditor />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+          </Routes>
+          <Toaster />
+        </AuthProvider>
       </Router>
-    </AuthProvider>
+    </QueryClientProvider>
   );
 }
-
-export default App;

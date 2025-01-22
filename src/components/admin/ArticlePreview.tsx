@@ -1,8 +1,8 @@
-import { Article } from '../../services/articleService';
-import ArticleView from '../articles/ArticleView';
+import { Article } from '@/types/Article';
+import ArticleView from '@/components/articles/ArticleView';
 
 interface ArticlePreviewProps {
-  article: Partial<Article>;
+  article: Article;
   onClose: () => void;
 }
 

@@ -1,116 +1,175 @@
 import { useState, useEffect } from 'react';
-import { collection, query, getDocs, where } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { Link } from 'react-router-dom';
+import { articleService } from '@/services/articleService';
+import { Article } from '@/types/Article';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FileText, Users, Eye, Calendar } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, Eye, ThumbsUp, MessageSquare } from 'lucide-react';
 
 interface DashboardStats {
   totalArticles: number;
   publishedArticles: number;
-  draftArticles: number;
   totalViews: number;
+  totalLikes: number;
+  totalComments: number;
 }
 
-export default function DashboardPage() {
+export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalArticles: 0,
     publishedArticles: 0,
-    draftArticles: 0,
     totalViews: 0,
+    totalLikes: 0,
+    totalComments: 0,
   });
+  const [recentArticles, setRecentArticles] = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const articlesRef = collection(db, 'articles');
-        
-        // Total articles
-        const totalSnapshot = await getDocs(articlesRef);
-        const total = totalSnapshot.size;
-
-        // Published articles
-        const publishedQuery = query(articlesRef, where('status', '==', 'published'));
-        const publishedSnapshot = await getDocs(publishedQuery);
-        const published = publishedSnapshot.size;
-
-        setStats({
-          totalArticles: total,
-          publishedArticles: published,
-          draftArticles: total - published,
-          totalViews: publishedSnapshot.docs.reduce((acc, doc) => acc + (doc.data().views || 0), 0),
-        });
-      } catch (error) {
-        console.error('Error fetching stats:', error);
-      }
-    };
-
-    fetchStats();
+    fetchDashboardData();
   }, []);
 
+  const fetchDashboardData = async () => {
+    try {
+      // Récupérer tous les articles
+      const articles = await articleService.getArticles();
+
+      // Calculer les statistiques
+      const publishedArticles = articles.filter(
+        (article) => article.status === 'published'
+      );
+
+      const totalViews = articles.reduce((acc, article) => acc + (article.views || 0), 0);
+      const totalLikes = articles.reduce((acc, article) => acc + (article.likes || 0), 0);
+      const totalComments = articles.reduce(
+        (acc, article) => acc + (article.comments_count || 0),
+        0
+      );
+
+      setStats({
+        totalArticles: articles.length,
+        publishedArticles: publishedArticles.length,
+        totalViews,
+        totalLikes,
+        totalComments,
+      });
+
+      // Récupérer les 5 articles les plus récents
+      setRecentArticles(articles.slice(0, 5));
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de charger les données du tableau de bord.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleArticleStatus = async (article: Article) => {
+    if (!article.id) return;
+
+    try {
+      const newStatus = article.status === 'published' ? 'draft' : 'published';
+      await articleService.updateArticle(article.id, {
+        status: newStatus,
+        published_at: newStatus === 'published' ? new Date().toISOString() : null,
+      });
+
+      setRecentArticles((prevArticles) =>
+        prevArticles.map((a) =>
+          a.id === article.id
+            ? { ...a, status: newStatus }
+            : a
+        )
+      );
+
+      toast({
+        title: 'Succès',
+        description: `Article ${newStatus === 'published' ? 'publié' : 'dépublié'}.`,
+      });
+    } catch (error) {
+      console.error('Error toggling article status:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de modifier le statut de l\'article.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Tableau de bord</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Tableau de bord</h1>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card className="p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-blue-100 text-blue-600">
-              <FileText className="h-6 w-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Articles</p>
-              <p className="text-2xl font-semibold">{stats.totalArticles}</p>
-            </div>
+          <div className="flex items-center space-x-2">
+            <Eye className="h-4 w-4 text-gray-500" />
+            <h3 className="text-sm font-medium text-gray-500">Vues totales</h3>
           </div>
+          <p className="mt-2 text-3xl font-bold">{stats.totalViews}</p>
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-green-100 text-green-600">
-              <Users className="h-6 w-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Articles Publiés</p>
-              <p className="text-2xl font-semibold">{stats.publishedArticles}</p>
-            </div>
+          <div className="flex items-center space-x-2">
+            <ThumbsUp className="h-4 w-4 text-gray-500" />
+            <h3 className="text-sm font-medium text-gray-500">Likes totaux</h3>
           </div>
+          <p className="mt-2 text-3xl font-bold">{stats.totalLikes}</p>
         </Card>
 
         <Card className="p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100 text-yellow-600">
-              <Calendar className="h-6 w-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Brouillons</p>
-              <p className="text-2xl font-semibold">{stats.draftArticles}</p>
-            </div>
+          <div className="flex items-center space-x-2">
+            <MessageSquare className="h-4 w-4 text-gray-500" />
+            <h3 className="text-sm font-medium text-gray-500">Commentaires totaux</h3>
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-purple-100 text-purple-600">
-              <Eye className="h-6 w-6" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Vues</p>
-              <p className="text-2xl font-semibold">{stats.totalViews}</p>
-            </div>
-          </div>
+          <p className="mt-2 text-3xl font-bold">{stats.totalComments}</p>
         </Card>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Articles Récents</h2>
-          {/* Liste des articles récents à implémenter */}
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold mb-4">Activité Récente</h2>
-          {/* Liste des activités récentes à implémenter */}
-        </Card>
+      <div className="bg-white shadow rounded-lg">
+        <div className="p-6">
+          <h2 className="text-lg font-medium">Articles récents</h2>
+          <div className="mt-6 divide-y">
+            {recentArticles.map((article) => (
+              <div
+                key={article.id}
+                className="py-4 flex items-center justify-between"
+              >
+                <div>
+                  <Link 
+                    to={`/admin/articles/${article.id}/edit`}
+                    className="text-sm font-medium hover:underline"
+                  >
+                    {article.title}
+                  </Link>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {article.status === 'published' ? 'Publié' : 'Brouillon'}
+                  </p>
+                </div>
+                <Button
+                  variant={article.status === 'published' ? 'destructive' : 'default'}
+                  onClick={() => toggleArticleStatus(article)}
+                >
+                  {article.status === 'published' ? 'Dépublier' : 'Publier'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

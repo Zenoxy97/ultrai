@@ -7,13 +7,38 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
-    base: '',
+    base: '/',
     define: {
       'process.env': env
     },
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'),
+      },
+    },
+    server: {
+      port: 3000,
+      strictPort: true,
+      historyApiFallback: true,
+      headers: {
+        'Content-Type': 'application/javascript',
+        'X-Content-Type-Options': 'nosniff'
+      },
+      middlewareMode: false,
+      fs: {
+        strict: true,
+        allow: ['./src']
+      }
+    },
+    preview: {
+      headers: {
+        'Content-Type': 'application/javascript',
+        'X-Content-Type-Options': 'nosniff'
+      }
+    },
     build: {
       outDir: 'dist',
-      assetsDir: '',
+      assetsDir: 'assets',
       rollupOptions: {
         output: {
           manualChunks: {
@@ -21,10 +46,8 @@ export default defineConfig(({ mode }) => {
               'react',
               'react-dom',
               'react-router-dom',
-              'firebase/app',
-              'firebase/auth',
-              'firebase/firestore',
-              'firebase/storage'
+              '@tanstack/react-query',
+              'date-fns'
             ],
             'admin': [
               '/src/components/admin/CommentModeration.tsx',
@@ -40,8 +63,9 @@ export default defineConfig(({ mode }) => {
               '/src/services/recommendationService.ts'
             ]
           },
-          chunkFileNames: '[name]-[hash].js',
-          assetFileNames: '[name]-[hash][extname]'
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]'
         }
       },
       chunkSizeWarningLimit: 800,
@@ -52,28 +76,6 @@ export default defineConfig(({ mode }) => {
           drop_console: true,
           drop_debugger: true
         }
-      }
-    },
-    resolve: {
-      alias: {
-        '@': resolve(__dirname, './src')
-      }
-    },
-    server: {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'X-Content-Type-Options': 'nosniff'
-      },
-      middlewareMode: false,
-      fs: {
-        strict: true,
-        allow: ['./src']
-      }
-    },
-    preview: {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'X-Content-Type-Options': 'nosniff'
       }
     },
     optimizeDeps: {

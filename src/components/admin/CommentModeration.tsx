@@ -20,7 +20,7 @@ export default function CommentModeration() {
       const commentsWithArticles = await Promise.all(
         pendingComments.map(async (comment) => {
           try {
-            const article = await articleService.getArticle(comment.articleId);
+            const article = await articleService.getArticle(comment.article_id);
             return {
               ...comment,
               articleTitle: article?.title || 'Article supprimé'
@@ -118,7 +118,7 @@ export default function CommentModeration() {
 
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-500">
-                    {commentService.formatRelativeDate(comment.createdAt)}
+                    {commentService.formatRelativeDate(comment.created_at)}
                   </p>
                   <div className="flex items-center space-x-4">
                     <button

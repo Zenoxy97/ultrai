@@ -1,5 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { MediaFile, mediaService } from '../../services/mediaService';
+
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
 interface MediaManagerProps {
   onSelect?: (url: string) => void;
@@ -10,56 +18,42 @@ interface MediaManagerProps {
 export default function MediaManager({ onSelect, onClose, showInModal = true }: MediaManagerProps) {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
-  const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
 
-  const loadFiles = useCallback(async () => {
+  useEffect(() => {
+    loadFiles();
+  }, []);
+
+  const loadFiles = async () => {
     try {
       setLoading(true);
-      const mediaFiles = await mediaService.getFiles('articles');
-      setFiles(mediaFiles);
+      const data = await mediaService.getFiles();
+      setFiles(data);
     } catch (err) {
       setError('Erreur lors du chargement des fichiers');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFiles = event.target.files;
     if (!uploadedFiles) return;
 
     try {
+      setUploading(true);
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
-        const fileName = mediaService.generateFileName(file);
-        const path = `articles/${fileName}`;
-
-        // Initialiser la progression
-        setUploadProgress(prev => ({ ...prev, [fileName]: 0 }));
-
-        // Upload du fichier
-        const mediaFile = await mediaService.uploadFile(file, path);
-
-        // Mettre à jour la liste des fichiers
-        setFiles(prev => [...prev, mediaFile]);
-
-        // Réinitialiser la progression
-        setUploadProgress(prev => {
-          const newProgress = { ...prev };
-          delete newProgress[fileName];
-          return newProgress;
-        });
+        await mediaService.uploadFile(file);
       }
+      await loadFiles();
     } catch (err) {
       setError('Erreur lors de l\'upload des fichiers');
       console.error(err);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -78,7 +72,6 @@ export default function MediaManager({ onSelect, onClose, showInModal = true }: 
   };
 
   const handleSelect = (file: MediaFile) => {
-    setSelectedFile(file);
     if (onSelect) {
       onSelect(file.url);
     }
@@ -163,9 +156,7 @@ export default function MediaManager({ onSelect, onClose, showInModal = true }: 
         {files.map((file) => (
           <div
             key={file.path}
-            className={`relative group rounded-lg overflow-hidden ${
-              selectedFile?.path === file.path ? 'ring-2 ring-blue-500' : ''
-            }`}
+            className={`relative group rounded-lg overflow-hidden`}
           >
             <div className="aspect-w-10 aspect-h-7 block w-full overflow-hidden bg-gray-100">
               <img
@@ -198,7 +189,7 @@ export default function MediaManager({ onSelect, onClose, showInModal = true }: 
                 {file.name}
               </p>
               <p className="text-sm text-gray-500">
-                {mediaService.formatFileSize(file.size)}
+                {formatFileSize(file.size)}
               </p>
             </div>
           </div>
@@ -213,28 +204,17 @@ export default function MediaManager({ onSelect, onClose, showInModal = true }: 
       )}
 
       {/* Progression des uploads */}
-      {Object.keys(uploadProgress).map((fileName) => (
-        <div key={fileName} className="relative pt-1">
+      {uploading && (
+        <div className="relative pt-1">
           <div className="flex mb-2 items-center justify-between">
             <div>
               <span className="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
-                {fileName}
+                Envoi en cours...
               </span>
             </div>
-            <div className="text-right">
-              <span className="text-xs font-semibold inline-block text-blue-600">
-                {uploadProgress[fileName]}%
-              </span>
-            </div>
-          </div>
-          <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
-            <div
-              style={{ width: `${uploadProgress[fileName]}%` }}
-              className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all duration-300"
-            ></div>
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 

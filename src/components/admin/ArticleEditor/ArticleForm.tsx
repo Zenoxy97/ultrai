@@ -1,111 +1,148 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Article } from '@/types/Article';
-import Editor from './Editor';
+import { Editor } from '@/components/ui/editor';
+import { TagInput } from '@/components/ui/tag-input';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { ImageUpload } from './ImageUpload';
-import { TagInput } from './TagInput';
-import { format } from 'date-fns';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+
+const formSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  excerpt: z.string().optional(),
+  content: z.string().min(1, 'Content is required'),
+  tags: z.array(z.string()),
+  status: z.enum(['draft', 'published']),
+});
+
+type FormData = z.infer<typeof formSchema>;
 
 interface ArticleFormProps {
   article?: Partial<Article>;
-  onSubmit: (data: Partial<Article>) => Promise<void>;
+  onSubmit: (data: FormData) => void;
+  isLoading: boolean;
 }
 
-export default function ArticleForm({ article, onSubmit }: ArticleFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { register, handleSubmit, setValue, watch } = useForm<Partial<Article>>({
+export function ArticleForm({ article, onSubmit, isLoading }: ArticleFormProps) {
+  const form = useForm<FormData>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
-      ...article,
+      title: article?.title || '',
+      excerpt: article?.excerpt || '',
+      content: article?.content || '',
+      tags: article?.tags || [],
       status: article?.status || 'draft',
-      publishedAt: article?.publishedAt || format(new Date(), 'yyyy-MM-dd'),
     },
   });
 
-  const handleFormSubmit = async (data: Partial<Article>) => {
-    try {
-      setIsSubmitting(true);
-      await onSubmit(data);
-    } finally {
-      setIsSubmitting(false);
+  useEffect(() => {
+    if (article) {
+      form.reset({
+        title: article.title || '',
+        excerpt: article.excerpt || '',
+        content: article.content || '',
+        tags: article.tags || [],
+        status: article.status || 'draft',
+      });
     }
-  };
+  }, [article, form]);
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-      <div className="space-y-2">
-        <Label htmlFor="title">Titre</Label>
-        <Input
-          id="title"
-          {...register('title', { required: true })}
-          placeholder="Titre de l'article"
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="title"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Title</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="excerpt">Extrait</Label>
-        <Textarea
-          id="excerpt"
-          {...register('excerpt', { required: true })}
-          placeholder="Bref résumé de l'article"
-          rows={3}
+        <FormField
+          control={form.control}
+          name="excerpt"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Excerpt</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label>Image de couverture</Label>
-        <ImageUpload
-          value={watch('coverImage')}
-          onChange={(url) => setValue('coverImage', url)}
+        <FormField
+          control={form.control}
+          name="content"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Content</FormLabel>
+              <FormControl>
+                <Editor {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label>Contenu</Label>
-        <Editor
-          content={watch('content') || ''}
-          onChange={(content) => setValue('content', content)}
+        <FormField
+          control={form.control}
+          name="tags"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tags</FormLabel>
+              <FormControl>
+                <TagInput
+                  tags={field.value}
+                  onChange={field.onChange}
+                  placeholder="Add tags..."
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label>Catégories</Label>
-        <TagInput
-          value={watch('categories') || []}
-          onChange={(categories) => setValue('categories', categories)}
-          placeholder="Ajouter une catégorie"
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Status</FormLabel>
+              <FormControl>
+                <select
+                  {...field}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="published">Published</option>
+                </select>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label>Tags</Label>
-        <TagInput
-          value={watch('tags') || []}
-          onChange={(tags) => setValue('tags', tags)}
-          placeholder="Ajouter un tag"
-        />
-      </div>
-
-      <div className="flex gap-4">
-        <Button
-          type="submit"
-          disabled={isSubmitting}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          {isSubmitting ? 'Enregistrement...' : 'Enregistrer'}
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Saving...' : 'Save'}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setValue('status', 'published')}
-          disabled={isSubmitting}
-        >
-          Publier
-        </Button>
-      </div>
-    </form>
+      </form>
+    </Form>
   );
 }

@@ -1,124 +1,151 @@
-import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, where } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { supabase } from '@/lib/supabase';
+import { slugify } from '@/lib/utils';
 
 export interface Category {
-  id?: string;
+  id: string;
   name: string;
   slug: string;
   description?: string;
-  color?: string;
-  parentId?: string;
-  order?: number;
-  createdAt: Date;
-  updatedAt: Date;
+  parent_id?: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export const categoryService = {
-  // Récupérer toutes les catégories
+interface ColorClass {
+  bg: string;
+  text: string;
+  border: string;
+}
+
+class CategoryService {
+  private readonly table = 'categories';
+  private readonly colors = ['blue', 'green', 'red', 'yellow', 'purple', 'pink', 'orange', 'gray'];
+
   async getCategories(): Promise<Category[]> {
-    const q = query(collection(db, 'categories'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Category));
-  },
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('*')
+      .order('name');
 
-  // Créer une nouvelle catégorie
-  async createCategory(category: Omit<Category, 'id'>): Promise<string> {
-    const docRef = await addDoc(collection(db, 'categories'), {
+    if (error) throw error;
+    return data;
+  }
+
+  async getCategory(id: string): Promise<Category> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async createCategory(category: Omit<Category, 'id' | 'created_at' | 'updated_at' | 'slug'>): Promise<Category> {
+    const now = new Date().toISOString();
+    const slug = this.generateSlug(category.name);
+
+    const { data, error } = await supabase
+      .from(this.table)
+      .insert([{
+        ...category,
+        slug,
+        created_at: now,
+        updated_at: now,
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async updateCategory(id: string, category: Partial<Omit<Category, 'id' | 'created_at' | 'updated_at' | 'slug'>>): Promise<Category> {
+    const updates: any = {
       ...category,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    });
-    return docRef.id;
-  },
+      updated_at: new Date().toISOString(),
+    };
 
-  // Mettre à jour une catégorie
-  async updateCategory(id: string, category: Partial<Category>): Promise<void> {
-    const docRef = doc(db, 'categories', id);
-    await updateDoc(docRef, {
-      ...category,
-      updatedAt: new Date()
-    });
-  },
-
-  // Supprimer une catégorie
-  async deleteCategory(id: string): Promise<void> {
-    // Vérifier si la catégorie est utilisée
-    const articlesRef = collection(db, 'articles');
-    const q = query(articlesRef, where('category', '==', id));
-    const snapshot = await getDocs(q);
-    
-    if (!snapshot.empty) {
-      throw new Error('Cette catégorie est utilisée par des articles et ne peut pas être supprimée');
+    if (category.name) {
+      updates.slug = this.generateSlug(category.name);
     }
 
-    const docRef = doc(db, 'categories', id);
-    await deleteDoc(docRef);
-  },
+    const { data, error } = await supabase
+      .from(this.table)
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
 
-  // Générer un slug unique
+    if (error) throw error;
+    return data;
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    const { error } = await supabase
+      .from(this.table)
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
+
   generateSlug(name: string): string {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-  },
+    return slugify(name);
+  }
 
-  // Générer une couleur aléatoire
   generateColor(): string {
-    const colors = [
-      'blue', 'green', 'red', 'yellow', 'purple', 'pink', 'indigo', 'teal'
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
-  },
+    return this.colors[Math.floor(Math.random() * this.colors.length)];
+  }
 
-  // Obtenir la classe Tailwind pour une couleur
-  getColorClass(color: string): { bg: string; text: string; border: string } {
-    const colorMap: { [key: string]: { bg: string; text: string; border: string } } = {
+  getColorClass(color: string): ColorClass {
+    const colorMap: Record<string, ColorClass> = {
       blue: {
         bg: 'bg-blue-100',
         text: 'text-blue-800',
-        border: 'border-blue-200'
+        border: 'border-blue-300'
       },
       green: {
         bg: 'bg-green-100',
         text: 'text-green-800',
-        border: 'border-green-200'
+        border: 'border-green-300'
       },
       red: {
         bg: 'bg-red-100',
         text: 'text-red-800',
-        border: 'border-red-200'
+        border: 'border-red-300'
       },
       yellow: {
         bg: 'bg-yellow-100',
         text: 'text-yellow-800',
-        border: 'border-yellow-200'
+        border: 'border-yellow-300'
       },
       purple: {
         bg: 'bg-purple-100',
         text: 'text-purple-800',
-        border: 'border-purple-200'
+        border: 'border-purple-300'
       },
       pink: {
         bg: 'bg-pink-100',
         text: 'text-pink-800',
-        border: 'border-pink-200'
+        border: 'border-pink-300'
       },
-      indigo: {
-        bg: 'bg-indigo-100',
-        text: 'text-indigo-800',
-        border: 'border-indigo-200'
+      orange: {
+        bg: 'bg-orange-100',
+        text: 'text-orange-800',
+        border: 'border-orange-300'
       },
-      teal: {
-        bg: 'bg-teal-100',
-        text: 'text-teal-800',
-        border: 'border-teal-200'
-      }
+      gray: {
+        bg: 'bg-gray-100',
+        text: 'text-gray-800',
+        border: 'border-gray-300'
+      },
     };
 
     return colorMap[color] || colorMap.blue;
   }
-};
+}
+
+export const categoryService = new CategoryService();
