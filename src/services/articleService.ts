@@ -39,6 +39,17 @@ class ArticleService {
     return data as Article[];
   }
 
+  async getPublishedArticles(): Promise<Article[]> {
+    const { data, error } = await supabase
+      .from(this.table)
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false });
+
+    if (error) throw error;
+    return data as Article[];
+  }
+
   async getArticle(id: string): Promise<Article> {
     const { data, error } = await supabase
       .from(this.table)

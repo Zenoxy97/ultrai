@@ -9,6 +9,8 @@ import ArticleList from '@/components/admin/ArticleList';
 import { ArticleEditor } from '@/components/admin/ArticleEditor';
 import Settings from '@/pages/admin/settings';
 import Login from '@/pages/admin/login';
+import HomePage from '@/pages/home';
+import ArticlesPage from '@/pages/articles';
 import { useEffect, Component, ReactNode } from 'react';
 
 // Error boundary component
@@ -74,6 +76,8 @@ function App() {
           <AuthProvider>
             <Routes>
               {/* Public Routes */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/articles" element={<ArticlesPage />} />
               <Route path="/admin/login" element={<Login />} />
 
               {/* Protected Admin Routes */}
