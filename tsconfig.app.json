@@ -8,7 +8,7 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
@@ -20,11 +20,11 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
 
-    /* for ShadCN */
+    /* Path aliases */
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src/**/*"]
 }
